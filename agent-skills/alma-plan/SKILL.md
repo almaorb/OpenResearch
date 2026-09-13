@@ -45,6 +45,29 @@ fenced `json` block in this shape:
 - Order the phases so each one leaves the tree working. Do not number them;
   order is position in the list. Four to eight phases is usually right; a
   phase is an hour or two of work.
+- A check may probe a URL (`{"description": ..., "http": "http://127.0.0.1:3000/health",
+  "expect_status": 200}`) or a page in the editor's own browser
+  (`{"description": ..., "browser": "<url>", "script": "<javascript that
+  evaluates to a truthy value once the page is right>"}`). **A phase that
+  adds or changes anything a person sees in a browser must carry a browser
+  check.** A build passing says nothing about a page: one that served its
+  own source as text, and one that froze the editor on open, both passed
+  every shell check they had.
+- A phase that writes a script must run it, not parse it. `bash -n` and
+  `--help` prove nothing; if the script cannot run against the instance
+  that is verifying the phase, give it a dry-run mode and check that, or
+  run it against a second instance on another port.
+- Optional top-level keys: `"policy"` (standing rules of the environment,
+  quoted into every brief; without it the default says everything is
+  preinstalled and nothing may be installed, containerised or scaffolded),
+  `"executor": {"ssh": {"host": ..., "directory": ...}}` to build on a
+  remote host over ssh and tmux, and per phase `"id"` and `"depends_on"`.
+- Before `ExitPlanMode`, write the design down as files in the worktree so
+  the supervisor and every phase can read them: `docs/inventory.md` (what
+  already exists and where — the capability map from the research),
+  `docs/whitepaper.md` (the problem, prior art, the approach and why) and
+  one `docs/adr/NNNN-<slug>.md` per significant choice (context, options
+  considered, decision, consequences). Every brief names them.
 - The prose above the block and the block must agree. The block is what
   runs.
 

@@ -21,13 +21,18 @@ const PROMPT_ACTIONS_CLASS_NAME = "prompt-actions plan-strip-actions flex flex-w
  *    default accept action. The caret menu holds Accept and bypass all
  *    (skip every gate, not just Auto's). No plain Accept edits tier here —
  *    the app has no story for partial (edits-only) approval.
- *  - Open plan: link in the title row → the end-pane plan tab. */
+ *  - Open plan: link in the title row → the end-pane plan tab.
+ *  - Approve and build (primary when `supervised`): inside the Alma IDE the
+ *    plan goes to its supervisor, which runs the phases through this session
+ *    one at a time with checks in between; the auto/bypass accepts move to
+ *    the caret menu. */
 export function PlanStrip({
   synthesized,
   agentLabel,
   onView,
   onApprove,
   showResumeModes,
+  supervised = false,
   onReject,
   onRevise,
 }: {
@@ -37,10 +42,12 @@ export function PlanStrip({
    * "Codex"); falls back to a generic label when the harness is unknown. */
   agentLabel: string;
   onView: (intent: TabOpenIntent) => void;
-  onApprove: (resumeMode?: "auto" | "bypassPermissions") => void;
+  onApprove: (resumeMode?: "auto" | "bypassPermissions" | "supervised") => void;
   /** Claude approval chooses its next permission mode; Codex preserves the
    * current permission choice and only leaves the independent Plan axis. */
   showResumeModes: boolean;
+  /** The Alma IDE's supervisor is there to take the plan. */
+  supervised?: boolean;
   onReject: () => void;
   /** Revision feedback; always non-empty (a blank submit sends a generic
    * "please revise" — note presence is what distinguishes revise from
@@ -142,8 +149,13 @@ export function PlanStrip({
           <span className="plan-strip-spacer flex-1" />
           {showResumeModes ? (
             <div className="plan-strip-approve relative flex" ref={menuRef}>
-              <Button size="small" variant="primary" className="rounded-e-none" onClick={() => onApprove("auto")}>
-                {m.plan_strip_accept_and_auto_mode()}
+              <Button
+                size="small"
+                variant="primary"
+                className="rounded-e-none"
+                onClick={() => onApprove(supervised ? "supervised" : "auto")}
+              >
+                {supervised ? m.plan_strip_approve_and_build() : m.plan_strip_accept_and_auto_mode()}
               </Button>
               <Button
                 size="small"
@@ -156,6 +168,16 @@ export function PlanStrip({
               </Button>
               {menuOpen && (
                 <div className="plan-strip-menu absolute end-0 bottom-[calc(100%_+_4px)] flex min-w-47.5 flex-col rounded-md border border-border bg-surface p-1 shadow-plan-menu z-6">
+                  {supervised && (
+                    <MenuItem
+                      onClick={() => {
+                        setMenuOpen(false);
+                        onApprove("auto");
+                      }}
+                    >
+                      {m.plan_strip_accept_and_auto_mode()}
+                    </MenuItem>
+                  )}
                   <MenuItem
                     onClick={() => {
                       setMenuOpen(false);

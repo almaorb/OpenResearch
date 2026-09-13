@@ -6135,6 +6135,9 @@ export function ChatPanel({
                 activeSession ? HARNESS_LABELS[activeSession.harness] : m.chat_the_agent()
               }
               showResumeModes={activeSession?.harness === "claude-code"}
+              supervised={
+                runtime.kind === "local" && runtime.alma === true && activeSession?.harness === "claude-code"
+              }
               onView={(intent) => openPlan?.(pendingPlan.plan, pendingPlan.promptId, intent)}
               onApprove={(resumeMode) =>
                 respond({

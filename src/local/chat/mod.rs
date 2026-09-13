@@ -1775,7 +1775,7 @@ pub enum PermissionDecision {
 }
 
 impl PermissionDecision {
-    fn deny(message: impl Into<String>) -> Self {
+    pub(crate) fn deny(message: impl Into<String>) -> Self {
         Self::Deny {
             message: message.into(),
         }
@@ -1814,6 +1814,14 @@ fn plan_auto_policy(tool_name: &str, tool_input: &Value) -> Option<PermissionDec
         // A non-read-only Bash command is the user's call — card.
         return None;
     }
+    // The Alma IDE's research tools read the codebase index, the memory,
+    // the browser and the terminal screen; the ones that type, click or
+    // navigate for the human stay a card.
+    if tool_name.starts_with("mcp__alma__") && alma_tool_is_research(tool_name) {
+        return Some(PermissionDecision::Allow {
+            updated_input: Some(tool_input.clone()),
+        });
+    }
     match tool_name {
         "WebFetch" | "WebSearch" => Some(PermissionDecision::Allow {
             updated_input: Some(tool_input.clone()),
@@ -1824,6 +1832,43 @@ fn plan_auto_policy(tool_name: &str, tool_input: &Value) -> Option<PermissionDec
         )),
         _ => None,
     }
+}
+
+/// The Alma IDE's control API port, set on `orx up` by the editor that
+/// started it. Absent outside the editor, where nothing can supervise.
+pub fn alma_control_port() -> Option<u16> {
+    std::env::var("ALMA_CONTROL_PORT")
+        .ok()
+        .and_then(|port| port.trim().parse().ok())
+}
+
+pub fn alma_supervisor_available() -> bool {
+    alma_control_port().is_some()
+}
+
+/// Which `mcp__alma__*` tools only look. `memory_remember` is here too: a
+/// note saved mid-research is the point of researching, not an edit to the
+/// tree the plan is about.
+fn alma_tool_is_research(tool_name: &str) -> bool {
+    matches!(
+        tool_name.trim_start_matches("mcp__alma__"),
+        "rag_search"
+            | "rag_index"
+            | "memory_recall"
+            | "memory_remember"
+            | "browser_read"
+            | "browser_dom"
+            | "browser_links"
+            | "browser_find"
+            | "browser_tabs"
+            | "browser_selected"
+            | "browser_console"
+            | "browser_audit"
+            | "browser_screenshot"
+            | "terminal_list"
+            | "terminal_read"
+            | "bus_read"
+    )
 }
 
 /// Cleanup for one bridge request, running on *every* exit from
@@ -5530,7 +5575,15 @@ impl ChatHost {
             return Err(anyhow!("another approval must be answered before this one"));
         }
         if let Some(mode) = req.resume_mode.as_deref() {
-            if crate::local::harness::permission_mode_for(&session.harness, mode).is_none() {
+            let supervised = mode == crate::local::harness::claude::SUPERVISED_RESUME;
+            if supervised && (session.harness != "claude-code" || !alma_supervisor_available()) {
+                return Err(anyhow!(
+                    "supervised builds need a Claude Code session inside the Alma IDE"
+                ));
+            }
+            if !supervised
+                && crate::local::harness::permission_mode_for(&session.harness, mode).is_none()
+            {
                 return Err(anyhow!("invalid resume mode for selected harness"));
             }
         }
@@ -5642,6 +5695,16 @@ impl ChatHost {
                 self.resolve_prompt_card(&req);
                 Ok(())
             }
+            ResumeAction::Revised { note } => {
+                // Delivered as a denial the model is already acting on; the
+                // card records the answer the user effectively gave.
+                let mut echo = req;
+                echo.approve = false;
+                echo.resume_mode = None;
+                echo.note = Some(note);
+                self.resolve_prompt_card(&echo);
+                Ok(())
+            }
             ResumeAction::Nothing => {
                 // Card closed with no resume (e.g. a denied Claude permission);
                 // broadcast idle so `busy` clears in the UI.
@@ -5674,6 +5737,77 @@ impl ChatHost {
     /// has already been delivered, so a (store-only) failure is logged rather
     /// than surfaced — an Err from `respond` would make the UI's catch clear
     /// `busy` on a turn that is actually still streaming.
+    /// Hands an approved plan to the Alma IDE's supervisor, which runs it
+    /// through this session one phase at a time.
+    ///
+    /// `Ok(Ok(()))` — the editor took the plan; `Ok(Err(reasons))` — the
+    /// editor refused it because a phase cannot be checked by a machine,
+    /// and the reasons are for the model; `Err` — the editor did not answer,
+    /// which leaves the card actionable for another try.
+    pub async fn hand_plan_to_alma(
+        &self,
+        session_id: &str,
+        plan_markdown: &str,
+    ) -> Result<std::result::Result<(), String>> {
+        let port = alma_control_port().ok_or_else(|| {
+            anyhow!("supervised builds need this orx to have been started by the Alma IDE")
+        })?;
+        let (session, project) = {
+            let store = Store::open()?;
+            let session = store
+                .get_chat_session(session_id)?
+                .ok_or_else(|| anyhow!("chat session not found"))?;
+            let project = store
+                .get_local_project(&session.project_id)?
+                .ok_or_else(|| anyhow!("project not found"))?;
+            (session, project)
+        };
+        let worktree = crate::local::git::session_worktree_path(&project.id, &session.id);
+        let reply: Value = self
+            .http
+            .post(format!("http://127.0.0.1:{port}/plan/accepted"))
+            .json(&json!({
+                "sessionId": session.id,
+                "projectId": project.id,
+                "projectPath": project.repo_path,
+                "worktree": worktree,
+                "title": session.title,
+                "planMarkdown": plan_markdown,
+                "secs": 60,
+            }))
+            .timeout(std::time::Duration::from_secs(70))
+            .send()
+            .await
+            .map_err(|error| anyhow!("the Alma IDE did not answer: {error}"))?
+            .json()
+            .await
+            .map_err(|error| anyhow!("the Alma IDE answered with something else: {error}"))?;
+        if reply.get("ok").and_then(Value::as_bool) == Some(true) {
+            return Ok(Ok(()));
+        }
+        let problems = reply
+            .get("problems")
+            .and_then(Value::as_array)
+            .map(|problems| {
+                problems
+                    .iter()
+                    .filter_map(Value::as_str)
+                    .collect::<Vec<_>>()
+                    .join("; ")
+            })
+            .filter(|problems| !problems.is_empty());
+        match problems {
+            Some(problems) => Ok(Err(problems)),
+            None => Err(anyhow!(
+                "the Alma IDE refused the plan: {}",
+                reply
+                    .get("error")
+                    .and_then(Value::as_str)
+                    .unwrap_or("no reason given")
+            )),
+        }
+    }
+
     fn resolve_prompt_card(&self, req: &PromptAnswer) {
         let resolved =
             mark_prompt_resolved(&self.msg_write, &req.session_id, &req.prompt_id, Some(req))
@@ -8799,6 +8933,16 @@ mod bridge_tests {
             "Bash",
             &json!({"command": "orx runs 2>&1 | head -50"})
         )));
+        // The Alma IDE's research tools look; the ones that act are a card.
+        assert!(allow(plan_auto_policy(
+            "mcp__alma__rag_search",
+            &json!({"query": "where is a phase verified"})
+        )));
+        assert!(allow(plan_auto_policy(
+            "mcp__alma__memory_remember",
+            &json!({"title": "t", "body": "b"})
+        )));
+        assert!(plan_auto_policy("mcp__alma__terminal_write", &json!({"text": "rm"})).is_none());
         assert!(allow(plan_auto_policy(
             "Bash",
             &json!({"command": "git show origin/b:f.py | head -100"})

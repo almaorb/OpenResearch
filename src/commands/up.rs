@@ -6003,7 +6003,13 @@ async fn disconnect_remote_session(
 }
 
 async fn local_runtime() -> Json<Value> {
-    Json(json!({ "kind": "local", "version": env!("CARGO_PKG_VERSION") }))
+    Json(json!({
+        "kind": "local",
+        "version": env!("CARGO_PKG_VERSION"),
+        // Inside the Alma IDE a plan can be approved into its supervisor;
+        // the strip offers that only when it is true.
+        "alma": crate::local::chat::alma_supervisor_available(),
+    }))
 }
 
 async fn run_ssh_host_preflight(host: String) -> SshHostTest {

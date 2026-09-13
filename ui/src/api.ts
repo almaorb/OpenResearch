@@ -998,7 +998,9 @@ export interface RemoteSessionInfo {
 }
 
 export type RuntimeInfo =
-  | { kind: "local"; version: string }
+  /** `alma` is true when this orx was started by the Alma IDE, whose
+   * supervisor can take an approved plan and build it phase by phase. */
+  | { kind: "local"; version: string; alma?: boolean }
   | { kind: "ssh"; version: string; dashboardProtocol: number; session: RemoteSessionInfo };
 
 export const getRuntime = (signal?: AbortSignal) => get<RuntimeInfo>("/_orx/runtime", signal);

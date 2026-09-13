@@ -669,6 +669,42 @@ impl Harness for ClaudeCode {
                 // replaced by a fresh implementation turn under the approved
                 // mode, reusing the proven --resume machinery. The drained
                 // bridge request is denied into the dying child, harmlessly.
+                ("plan", true) if answer.resume_mode.as_deref() == Some(SUPERVISED_RESUME) => {
+                    // Approve and build under the Alma IDE's supervisor: the
+                    // plan goes to the editor, which runs its phases through
+                    // this session one at a time. The held ExitPlanMode is
+                    // denied either way — with "wait for the first phase"
+                    // when the editor took the plan, with the reasons when
+                    // it could not, so the model revises in the same turn.
+                    let plan = prompt.plan.as_deref().unwrap_or_default();
+                    match ctx.host.hand_plan_to_alma(&ctx.session_id, plan).await? {
+                        Ok(()) => {
+                            ctx.host.settle_permission(
+                                native_id,
+                                crate::local::chat::PermissionDecision::deny(
+                                    "The user approved the plan. The Alma supervisor will hand \
+                                     you its phases one at a time in this session, each as a new \
+                                     message. Stop now and wait for the first one; do not start \
+                                     implementing.",
+                                ),
+                            )?;
+                            Ok(ResumeAction::Handled { plan_mode: None })
+                        }
+                        Err(problems) => {
+                            ctx.host.settle_permission(
+                                native_id,
+                                crate::local::chat::PermissionDecision::deny(format!(
+                                    "That plan cannot be run by the Alma supervisor: \
+                                     {problems}. Fix exactly this in the final ```json block \
+                                     and present the plan again with ExitPlanMode."
+                                )),
+                            )?;
+                            Ok(ResumeAction::Revised {
+                                note: format!("The Alma supervisor cannot run it: {problems}"),
+                            })
+                        }
+                    }
+                }
                 ("plan", true) => {
                     let (text, mode) = synthesize_resume("plan", answer);
                     Ok(ResumeAction::SendMessage {
@@ -877,26 +913,30 @@ pub(crate) fn write_plan_settings(repo: &std::path::Path) -> Result<PathBuf> {
 /// the running server for the child's whole life.
 pub(crate) fn write_mcp_config(
     repo: &std::path::Path,
-    up_port: u16,
-    session_id: &str,
-    token: &str,
+    gate: Option<GateBridge<'_>>,
 ) -> Result<PathBuf> {
-    let orx = std::env::current_exe()
-        .map_err(|e| anyhow!("cannot resolve orx binary path for the mcp bridge: {e}"))?;
-    let config = serde_json::json!({
-        "mcpServers": {
-            "orx": {
+    let mut servers = serde_json::Map::new();
+    if let Some(gate) = gate {
+        let orx = std::env::current_exe()
+            .map_err(|e| anyhow!("cannot resolve orx binary path for the mcp bridge: {e}"))?;
+        servers.insert(
+            "orx".to_string(),
+            serde_json::json!({
                 "type": "stdio",
                 "command": orx.to_string_lossy(),
                 "args": ["mcp-gate"],
                 "env": {
-                    "ORX_UP_PORT": up_port.to_string(),
-                    "ORX_SESSION_ID": session_id,
-                    "ORX_GATE_TOKEN": token,
+                    "ORX_UP_PORT": gate.up_port.to_string(),
+                    "ORX_SESSION_ID": gate.session_id,
+                    "ORX_GATE_TOKEN": gate.token,
                 },
-            },
-        }
-    });
+            }),
+        );
+    }
+    if let Some(alma) = alma_mcp_server() {
+        servers.insert("alma".to_string(), alma);
+    }
+    let config = serde_json::json!({ "mcpServers": servers });
     let path = repo.join(MCP_CONFIG_REL);
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent)
@@ -909,6 +949,54 @@ pub(crate) fn write_mcp_config(
     )
     .map_err(|e| anyhow!("cannot protect {}: {e}", path.display()))?;
     Ok(path)
+}
+
+/// The `resumeMode` of a plan approval that hands the plan to the Alma IDE's
+/// supervisor instead of resuming the session in auto mode.
+pub const SUPERVISED_RESUME: &str = "supervised";
+
+/// The `orx mcp-gate` bridge one child rides for its whole life.
+pub(crate) struct GateBridge<'a> {
+    pub up_port: u16,
+    pub session_id: &'a str,
+    pub token: &'a str,
+}
+
+/// The Alma IDE's MCP server, when this `orx up` was started by the editor.
+///
+/// The editor sets `ALMA_MCP_SERVER` (the server script) and
+/// `ALMA_CONTROL_PORT` (its loopback control API) on `orx up`; the server
+/// gives every session the editor's browser, terminals, event bus, the
+/// project's semantic index and the dashboard's memory. Outside the editor
+/// neither variable is set and sessions are exactly upstream's.
+pub(crate) fn alma_mcp_server() -> Option<serde_json::Value> {
+    let script = std::env::var("ALMA_MCP_SERVER").ok()?;
+    let script = script.trim();
+    if script.is_empty() {
+        return None;
+    }
+    let port = std::env::var("ALMA_CONTROL_PORT")
+        .ok()
+        .and_then(|port| port.trim().parse::<u16>().ok())
+        .unwrap_or(7897);
+    let node = crate::local::shell_env::find_on_path("node")
+        .or_else(|| {
+            // The editor may start `orx up` before a login shell has put
+            // Homebrew on PATH.
+            ["/opt/homebrew/bin", "/usr/local/bin"]
+                .into_iter()
+                .find_map(|dir| {
+                    crate::local::shell_env::find_in_dir(std::path::Path::new(dir), "node")
+                })
+        })
+        .map(|path| path.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "node".to_string());
+    Some(serde_json::json!({
+        "type": "stdio",
+        "command": node,
+        "args": [script],
+        "env": { "ALMA_BROWSER_API": format!("http://127.0.0.1:{port}") },
+    }))
 }
 
 /// Session reasoning id → Claude's `--effort` value.
@@ -2162,7 +2250,12 @@ mod tests {
     #[test]
     fn local_mcp_config_contains_only_string_environment_values() {
         let repo = std::env::temp_dir().join(format!("orx-mcp-test-{}", uuid::Uuid::new_v4()));
-        let path = write_mcp_config(&repo, 4791, "session", "gate").unwrap();
+        let gate = GateBridge {
+            up_port: 4791,
+            session_id: "session",
+            token: "gate",
+        };
+        let path = write_mcp_config(&repo, Some(gate)).unwrap();
         let config: serde_json::Value =
             serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
         let env = config["mcpServers"]["orx"]["env"].as_object().unwrap();
@@ -2177,6 +2270,40 @@ mod tests {
             );
         }
         let _ = std::fs::remove_dir_all(repo);
+    }
+
+    /// Without the editor's variables a session's MCP config is upstream's:
+    /// the gate alone, and no config at all in modes that have no gate.
+    #[test]
+    fn the_alma_server_rides_only_when_the_editor_started_us() {
+        // The test process inherits whatever environment it was run from, and
+        // the assertion is about the absence of these two variables.
+        let saved: Vec<(String, Option<String>)> = ["ALMA_MCP_SERVER", "ALMA_CONTROL_PORT"]
+            .iter()
+            .map(|name| (name.to_string(), std::env::var(name).ok()))
+            .collect();
+        // SAFETY: tests in this module do not read these variables
+        // concurrently; the values are restored below.
+        unsafe {
+            std::env::remove_var("ALMA_MCP_SERVER");
+            std::env::remove_var("ALMA_CONTROL_PORT");
+        }
+        assert!(alma_mcp_server().is_none());
+        unsafe {
+            std::env::set_var("ALMA_MCP_SERVER", "/tmp/alma-browser-mcp.mjs");
+            std::env::set_var("ALMA_CONTROL_PORT", "7999");
+        }
+        let alma = alma_mcp_server().expect("configured by the editor");
+        assert_eq!(alma["args"][0], "/tmp/alma-browser-mcp.mjs");
+        assert_eq!(alma["env"]["ALMA_BROWSER_API"], "http://127.0.0.1:7999");
+        unsafe {
+            for (name, value) in saved {
+                match value {
+                    Some(value) => std::env::set_var(name, value),
+                    None => std::env::remove_var(name),
+                }
+            }
+        }
     }
 
     /// Plugins live in the version cache or a marketplace checkout, and a

@@ -44,8 +44,8 @@ use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 
 use crate::error::{anyhow, Result};
 use crate::local::harness::claude::{
-    claude_permission_mode, find_claude, uses_permission_bridge, write_mcp_config,
-    write_plan_settings,
+    alma_mcp_server, claude_permission_mode, find_claude, uses_permission_bridge, write_mcp_config,
+    write_plan_settings, GateBridge,
 };
 use crate::local::harness::{HarnessAuthState, PermissionMode};
 use crate::local::native_store::NativeStore;
@@ -528,7 +528,12 @@ async fn spawn_client(spec: &SpawnSpec, auth_generation: u64) -> Result<Arc<Clau
                 &spec.session_id,
                 spec.config.permission_mode == Some(PermissionMode::Plan),
             );
-            match write_mcp_config(&spec.repo, port, &spec.session_id, &token) {
+            let gate = GateBridge {
+                up_port: port,
+                session_id: &spec.session_id,
+                token: &token,
+            };
+            match write_mcp_config(&spec.repo, Some(gate)) {
                 Ok(path) => {
                     cmd.arg("--mcp-config").arg(path);
                     cmd.args(["--permission-prompt-tool", "mcp__orx__approve"]);
@@ -543,6 +548,16 @@ async fn spawn_client(spec: &SpawnSpec, auth_generation: u64) -> Result<Arc<Clau
                     );
                 }
             }
+        }
+    } else if alma_mcp_server().is_some() {
+        // No gate in this mode, but the Alma IDE's tools still ride along:
+        // an auto-mode builder needs the same browser, terminals and memory
+        // a plan-mode researcher had.
+        match write_mcp_config(&spec.repo, None) {
+            Ok(path) => {
+                cmd.arg("--mcp-config").arg(path);
+            }
+            Err(e) => eprintln!("orx up: alma mcp server not configured: {e}"),
         }
     }
     crate::local::chat::prepare_env(&mut cmd);

@@ -239,6 +239,11 @@ pub enum ResumeAction {
         /// (OpenCode's native `plan_exit` question).
         plan_mode: Option<bool>,
     },
+    /// The harness turned the answer into a revision request on the user's
+    /// behalf — the Alma supervisor refused a plan it cannot run, and the
+    /// reasons went to the model as a denial. The card resolves as rejected
+    /// with `note`, so the transcript says why the plan came back.
+    Revised { note: String },
     /// No resume — e.g. a denied permission that just closes the card.
     Nothing,
 }

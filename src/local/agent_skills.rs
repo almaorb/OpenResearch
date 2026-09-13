@@ -103,6 +103,8 @@ const EVIDENCE: &str = include_str!("../../agent-skills/orx-evidence/SKILL.md");
 const CUSTOMIZE: &str = include_str!("../../agent-skills/orx-customize/SKILL.md");
 const PAPER: &str = include_str!("../../agent-skills/orx-paper/SKILL.md");
 const INSTANCES: &str = include_str!("../../agent-skills/orx-instances/SKILL.md");
+const ALMA_RESEARCH: &str = include_str!("../../agent-skills/alma-research/SKILL.md");
+const ALMA_PLAN: &str = include_str!("../../agent-skills/alma-plan/SKILL.md");
 const FIGURES: &str = include_str!("../../agent-skills/orx-figures/SKILL.md");
 const FIGURES_RESOURCES: &[AgentSkillResource] = &[
     AgentSkillResource {
@@ -221,9 +223,39 @@ const S_INSTANCES: AgentSkill = AgentSkill {
     resources: &[],
 };
 
+const S_ALMA_RESEARCH: AgentSkill = AgentSkill {
+    name: "alma-research",
+    description: "Research an engineering goal inside the Alma IDE before planning it: what the company already knows (memory), what the codebase already does (semantic index), what exists on GitHub and the web, and which approach holds up. Use whenever a task starts with a goal rather than a diff, and before proposing a plan.",
+    content: ALMA_RESEARCH,
+    resources: &[],
+};
+const S_ALMA_PLAN: AgentSkill = AgentSkill {
+    name: "alma-plan",
+    description: "Write an engineering plan the Alma IDE's supervisor can run unattended: ordered phases, each with a brief and at least one shell check that decides on its own whether the phase worked. Use in plan mode, once the research is done, before calling ExitPlanMode.",
+    content: ALMA_PLAN,
+    resources: &[],
+};
+
+/// Whether this `orx up` was started by the Alma IDE, whose MCP server the
+/// `alma-*` skills are written for. Outside the editor those tools do not
+/// exist, and a skill that names absent tools is worse than none.
+fn inside_alma() -> bool {
+    std::env::var("ALMA_MCP_SERVER").is_ok_and(|value| !value.trim().is_empty())
+}
+
 /// The modules for a given set, in a stable order. Full adds `create`; every
-/// shared module uses the same canonical `SKILL.md`.
+/// shared module uses the same canonical `SKILL.md`. The Alma skills join
+/// either set only inside the Alma IDE.
 pub fn skills(set: SkillSet) -> Vec<&'static AgentSkill> {
+    let mut modules = base_skills(set);
+    if inside_alma() {
+        modules.push(&S_ALMA_RESEARCH);
+        modules.push(&S_ALMA_PLAN);
+    }
+    modules
+}
+
+fn base_skills(set: SkillSet) -> Vec<&'static AgentSkill> {
     match set {
         SkillSet::Local => vec![
             &S_EXPERIMENT_TREE,

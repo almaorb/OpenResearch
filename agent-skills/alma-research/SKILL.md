@@ -52,17 +52,17 @@ inventory these sends the plan off to rebuild one of them. So, before the
 options section, the report carries an inventory drawn from these three
 places, each entry with its repository, path and what it provides:
 
-- **The catalog, first.** `~/code/exemplars/CATALOG.md` lists every
+- **The catalog, first.** `~/code/examples/CATALOG.md` lists every
   repository by tier — **production** (serves a client), **scaffold** (empty
-  structure), **exemplar** (a worked example in the corpus), **tooling** —
+  structure), **example** (a worked example in the corpus), **tooling** —
   with lineage, vertical, stack, features and what each is good for, rendered
   from a `catalog.toml` in every repository. Its last table is the retrieval
   view: lineage × vertical → what to seed from. Filter there before reading
   code: the goal's lineage and vertical name the two or three repositories
-  worth opening. The words are defined in `~/code/exemplars/GLOSSARY.md`;
+  worth opening. The words are defined in `~/code/examples/GLOSSARY.md`;
   use them and no synonyms.
 - **The company's repositories.** `gh repo list almaorb --limit 100`
-  (Bash) for anything the catalog does not list yet. `github.com/almaorb/exemplars`
+  (Bash) for anything the catalog does not list yet. `github.com/almaorb/examples`
   (formerly `workspaces`) is the corpus of prototypes, legacy and unfinished
   work; its `PRODUCTS.md` says what each product is and `BRICKS.md` which
   parts are reusable and how (the SPA shell to copy, the kernel to build on).

@@ -33,7 +33,7 @@ import { ltr } from "./i18n";
 import { setLocale } from "./locale";
 import { m } from "./paraglide/messages.js";
 import { isLocale } from "./paraglide/runtime.js";
-import { setThemePreference } from "./theme";
+import { setEditorThemeAvailable, setThemePreference } from "./theme";
 import { Button, Input, showAlert, Spinner } from "./components/ui";
 import { RemoteStopDialog } from "./components/RemoteStopDialog";
 import { SshConnectTerminal } from "./components/SshConnectTerminal";
@@ -432,6 +432,7 @@ export function RuntimeRoot() {
         workspaceMounted.current = false;
       }
     }
+    setEditorThemeAvailable(next.kind === "local" && next.alma === true);
     setRuntime(next);
     setError(runtimeQuery.error?.message ?? null);
   }, [launchPlaceholder, runtimeQuery.data, runtimeQuery.error]);

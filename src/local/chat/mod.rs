@@ -5808,6 +5808,27 @@ impl ChatHost {
         }
     }
 
+    /// One call into the Alma IDE's control API, for the dashboard's voice
+    /// controls: the page cannot reach the editor itself (the control API
+    /// refuses anything a browser sends), so this server asks on its behalf.
+    /// `route` is the control API's path without the leading slash; the
+    /// editor's reply comes back as it is, `{ok, ...}` or `{ok:false, error}`.
+    pub async fn ask_alma(&self, route: &str, body: Value) -> Result<Value> {
+        let port = alma_control_port().ok_or_else(|| {
+            anyhow!("the voice controls need this orx to have been started by the Alma IDE")
+        })?;
+        self.http
+            .post(format!("http://127.0.0.1:{port}/{route}"))
+            .json(&body)
+            .timeout(std::time::Duration::from_secs(10))
+            .send()
+            .await
+            .map_err(|error| anyhow!("the Alma IDE did not answer: {error}"))?
+            .json()
+            .await
+            .map_err(|error| anyhow!("the Alma IDE answered with something else: {error}"))
+    }
+
     fn resolve_prompt_card(&self, req: &PromptAnswer) {
         let resolved =
             mark_prompt_resolved(&self.msg_write, &req.session_id, &req.prompt_id, Some(req))

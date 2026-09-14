@@ -22,7 +22,7 @@ import { getProjectStarterPromptsQuery } from "../queries/projects";
 import { m } from "../paraglide/messages.js";
 import { autoDir, ltr } from "../i18n";
 import { useLocale } from "../locale";
-import { getThemePreference } from "../theme";
+import { getPortableThemePreference } from "../theme";
 import {
   ArrowDown,
   ArrowUpRight,
@@ -154,6 +154,7 @@ import {
   usePopover,
   type ModelSelection,
 } from "./ModelPicker";
+import { AlmaVoiceControls } from "./AlmaVoice";
 import { ContextMeter } from "./ContextMeter";
 import { renderNote } from "./agentNote";
 import {
@@ -4116,7 +4117,7 @@ function RemoteHostDialog({
     setOpeningHost(host);
     try {
       const session = await createRemoteSessionMutation.mutateAsync([host, {
-        theme: getThemePreference(),
+        theme: getPortableThemePreference(),
         locale: getLocale(),
       }]);
       remoteWindow.location.replace(session.gatewayUrl);
@@ -6466,6 +6467,11 @@ export function ChatPanel({
                 </Button>
               )}
               <div className="min-w-0 flex-1" />
+              {/* Inside the Alma IDE the orb's mic sits here: what is said goes
+                into this session as a message and its replies are read aloud. */}
+              {runtime.kind === "local" && runtime.alma === true && (
+                <AlmaVoiceControls sessionOpen={!!openSession} />
+              )}
               {/* The model picker reflects the open session (harness locked once it
                 exists); the global default only applies before the first
                 message. */}

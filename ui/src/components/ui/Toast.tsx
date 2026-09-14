@@ -1,11 +1,11 @@
 import type { ComponentProps } from "react";
 import { type ExternalToast, Toaster as SonnerToaster, toast } from "sonner";
-import { useThemePreference } from "../../theme";
+import { useResolvedTheme } from "../../theme";
 
 export type ToastVariant = "success" | "info" | "warning" | "error";
 
 export function Toaster(props: ComponentProps<typeof SonnerToaster>) {
-  const [theme] = useThemePreference();
+  const theme = useResolvedTheme();
   return <SonnerToaster theme={theme} {...props} />;
 }
 

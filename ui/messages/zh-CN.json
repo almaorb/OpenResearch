@@ -444,6 +444,7 @@
   "settings_page_version": "版本",
   "settings_page_when_enabled_each_new_project_gets_a_private": "启用后，每个新项目都会获得一个私有 GitHub 仓库。实验分支会自动推送，便于协作者查看。算力执行始终使用直接的源代码快照。",
   "settings_page_with_a_token_saved_a_paper_opened_in": "保存令牌后，可让控制台中打开的论文与 Overleaf 项目双向保持同步。Overleaf 的 Git 集成需要付费方案；没有付费方案时，仍可将论文作为新项目上传到 Overleaf。令牌仅保存在此计算机上，不会发送到算力后端。",
+  "settings_theme_editor": "编辑器",
   "settings_theme_dark": "深色",
   "settings_theme_description": "“系统”会跟随操作系统的浅色或深色设置。",
   "settings_theme_heading": "主题",
@@ -1144,5 +1145,15 @@
   "skills_remove_imported_label": "从 OpenResearch 移除 {name}",
   "skills_remove_imported_confirm": "从 OpenResearch 移除“{name}”？源文件将保留在你的编程智能体中。",
   "chat_session_limit_reached": "已达到会话使用限额",
-  "chat_model_unavailable": "模型不可用"
+  "chat_model_unavailable": "模型不可用",
+  "alma_voice_mode": "Alma 语音模式",
+  "alma_voice_mode_plan": "规划",
+  "alma_voice_mode_assistant": "助手",
+  "alma_voice_mode_build": "构建",
+  "alma_voice_mode_transcribe": "听写",
+  "alma_voice_talk": "对此会话说话",
+  "alma_voice_stop_listening": "停止聆听",
+  "alma_voice_stop": "停止",
+  "alma_voice_starting": "正在启动麦克风…",
+  "alma_voice_unavailable": "Alma 语音球未运行"
 }

@@ -37,6 +37,7 @@ import {
   Cpu,
   ExternalLink,
   Info,
+  Blend,
   Monitor,
   Moon,
   Plus,
@@ -108,7 +109,7 @@ import {
 } from "../api";
 import { onDataDirMove } from "../events";
 import { useRestartApp, useUpdateStatus } from "./UpdateBanner";
-import { useThemePreference, type ThemePreference } from "../theme";
+import { useEditorThemeAvailable, useThemePreference, type ThemePreference } from "../theme";
 import { m } from "../paraglide/messages.js";
 import { ltr } from "../i18n";
 import { setLocale, useLocale } from "../locale";
@@ -2359,6 +2360,7 @@ const THEME_OPTIONS: {
   label: () => string;
   icon: typeof Monitor;
 }[] = [
+    { value: "editor", label: m.settings_theme_editor, icon: Blend },
     { value: "system", label: m.settings_theme_system, icon: Monitor },
     { value: "light", label: m.settings_theme_light, icon: Sun },
     { value: "dark", label: m.settings_theme_dark, icon: Moon },
@@ -2373,6 +2375,8 @@ const LOCALE_CHOICES: { id: Locale; label: string }[] = [
 function AppearanceTab() {
   const locale = useLocale();
   const [preference, setPreference] = useThemePreference();
+  const editorAvailable = useEditorThemeAvailable();
+  const themeOptions = editorAvailable ? THEME_OPTIONS : THEME_OPTIONS.filter((o) => o.value !== "editor");
 
   // Arrow keys move selection relative to the focused radio, with focus
   // following the new choice (WAI-ARIA radio pattern).
@@ -2390,9 +2394,9 @@ function AppearanceTab() {
     ];
     const from = radios.findIndex((r) => r === document.activeElement);
     const anchor =
-      from === -1 ? THEME_OPTIONS.findIndex((o) => o.value === preference) : from;
-    const next = (anchor + dir + THEME_OPTIONS.length) % THEME_OPTIONS.length;
-    setPreference(THEME_OPTIONS[next].value);
+      from === -1 ? themeOptions.findIndex((o) => o.value === preference) : from;
+    const next = (anchor + dir + themeOptions.length) % themeOptions.length;
+    setPreference(themeOptions[next].value);
     radios[next]?.focus();
   };
 
@@ -2408,7 +2412,7 @@ function AppearanceTab() {
             aria-label={m.settings_theme_heading()}
             onKeyDown={onKeyDown}
           >
-            {THEME_OPTIONS.map(({ value, label, icon: Icon }) => (
+            {themeOptions.map(({ value, label, icon: Icon }) => (
               <button
                 key={value}
                 type="button"

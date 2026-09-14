@@ -1005,6 +1005,56 @@ export type RuntimeInfo =
 
 export const getRuntime = (signal?: AbortSignal) => get<RuntimeInfo>("/_orx/runtime", signal);
 
+// --- the Alma IDE's voice orb ---------------------------------------------
+// Relayed by this orx to the editor's control API (`/api/alma/<route>` →
+// `/<route>`); every reply is the editor's own `{ok, ...}` or `{ok:false, error}`.
+
+export type AlmaVoiceMode = "transcribe" | "assistant" | "plan" | "build";
+
+export interface AlmaVoiceState {
+  ok: boolean;
+  error?: string;
+  /** A live voice session exists. */
+  running: boolean;
+  /** The session is being started: mic permission, key, connect. */
+  starting: boolean;
+  listening: boolean;
+  speaking: boolean;
+  status: string;
+  mode: AlmaVoiceMode;
+}
+
+export const getAlmaVoiceState = () => post<AlmaVoiceState>("/api/alma/voice/state", {});
+export const almaVoiceTalk = (action: "start" | "stop" | "toggle") =>
+  post<AlmaVoiceState>("/api/alma/voice/talk", { action });
+export const setAlmaVoiceMode = (mode: AlmaVoiceMode) => post<AlmaVoiceState>("/api/alma/voice/mode", { mode });
+/** A sentence for the orb to say out loud, as a turn relayed from this page. */
+export const almaSay = (text: string) => post<{ ok: boolean; error?: string }>("/api/alma/say", { text });
+
+export interface AlmaBusEvent {
+  seq: number;
+  at_ms: number;
+  source: "user" | "agent" | "terminal" | "browser" | "editor";
+  kind: string;
+  text: string;
+}
+
+export const readAlmaBus = (since: number) =>
+  post<{ ok: boolean; events: AlmaBusEvent[]; next_since: number }>("/api/alma/bus", { since });
+
+/** The editor's look: its theme, and the colors under the names theme.css reads. */
+export interface AlmaTheme {
+  ok: boolean;
+  error?: string;
+  name: string;
+  appearance: "light" | "dark";
+  /** `--base`, `--panel`, `--text`, … without the dashes, each `#rrggbbaa`. */
+  colors: Record<string, string>;
+  fonts: { sans: string; mono: string };
+}
+
+export const getAlmaTheme = () => post<AlmaTheme>("/api/alma/theme", {});
+
 export const listRemoteSessions = (signal?: AbortSignal) =>
   get<{ sessions: RemoteSessionInfo[] }>("/api/remote/sessions", signal).then((r) => r.sessions);
 

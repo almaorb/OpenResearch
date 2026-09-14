@@ -682,6 +682,9 @@ fn router(state: AppState, remote_auth: Option<RemoteAuth>) -> Router {
         .route("/api/internal/permissions", post(bridge_permission))
         .route("/api/chat/attachments/{name}", get(chat_attachment))
         .route("/api/agent/status", get(agent_status))
+        // The Alma IDE's voice orb, for the composer's mic: relayed to the
+        // editor's control API, which only this process may call.
+        .route("/api/alma/{*route}", post(alma_voice))
         .fallback(spa)
         // Chat attachments (PDFs, images) ride as base64 in the send-message
         // JSON body; the 2 MB axum default rejects any real paper. Cap it well
@@ -6000,6 +6003,24 @@ async fn disconnect_remote_session(
     Path(id): Path<String>,
 ) -> ApiResult {
     Ok(Json(json!(state.remote_sessions.disconnect(&id).await?)))
+}
+
+/// The routes of the editor's control API the dashboard may call: the
+/// orb's state, mic and mode, a sentence for it to say, the transcript bus
+/// and the editor's theme. Nothing else — the browser and terminal routes
+/// stay the agents'.
+const ALMA_VOICE_ROUTES: [&str; 6] = ["voice/state", "voice/talk", "voice/mode", "say", "bus", "theme"];
+
+async fn alma_voice(
+    State(state): State<AppState>,
+    Path(route): Path<String>,
+    body: Option<Json<Value>>,
+) -> ApiResult {
+    if !ALMA_VOICE_ROUTES.contains(&route.as_str()) {
+        return Err(not_found("alma route"));
+    }
+    let body = body.map(|Json(body)| body).unwrap_or_else(|| json!({}));
+    Ok(Json(state.chat.ask_alma(&route, body).await?))
 }
 
 async fn local_runtime() -> Json<Value> {

@@ -1,0 +1,10 @@
+# The catalog entry for this repository — see ~/code/exemplars/GLOSSARY.md.
+name      = "openresearch"
+tier      = "tooling"
+lineage   = "research"
+vertical  = "factory"
+stack     = ["rust", "react", "tanstack", "xterm"]
+features  = ["orx", "agent-sessions", "worktrees", "skills", "alma-research", "alma-plan", "experiment-tree"]
+serves    = ""
+origin    = "fork of alphaXiv/OpenResearch"
+good_for  = "the research and planning half of the factory: drives Claude Code / Codex sessions, writes inventory, whitepaper, ADRs and the blueprint"

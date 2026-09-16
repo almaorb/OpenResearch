@@ -906,6 +906,45 @@ pub(crate) fn write_plan_settings(repo: &std::path::Path) -> Result<PathBuf> {
     Ok(path)
 }
 
+/// The servers a project declares in its `.mcp.json`, with `${repo}`
+/// resolved; an unreadable or malformed file is reported and skipped.
+fn project_mcp_servers(repo: &std::path::Path) -> Vec<(String, serde_json::Value)> {
+    let path = repo.join(".mcp.json");
+    let Ok(text) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let parsed: serde_json::Value = match serde_json::from_str(&text) {
+        Ok(value) => value,
+        Err(e) => {
+            eprintln!("orx up: {} is not valid JSON, its servers are skipped: {e}", path.display());
+            return Vec::new();
+        }
+    };
+    let repo_text = repo.to_string_lossy().into_owned();
+    fn resolve(value: serde_json::Value, repo: &str) -> serde_json::Value {
+        match value {
+            serde_json::Value::String(s) => serde_json::Value::String(s.replace("${repo}", repo)),
+            serde_json::Value::Array(items) => {
+                serde_json::Value::Array(items.into_iter().map(|v| resolve(v, repo)).collect())
+            }
+            serde_json::Value::Object(map) => serde_json::Value::Object(
+                map.into_iter().map(|(k, v)| (k, resolve(v, repo))).collect(),
+            ),
+            other => other,
+        }
+    }
+    parsed["mcpServers"]
+        .as_object()
+        .map(|servers| {
+            servers
+                .iter()
+                .filter(|(name, _)| name.as_str() != "orx" && name.as_str() != "alma")
+                .map(|(name, server)| (name.clone(), resolve(server.clone(), &repo_text)))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Write the per-spawn `--mcp-config` file pointing Claude at `orx mcp-gate`
 /// (this same binary) and return its path. The bridge's env block carries the
 /// `orx up` port, the session id, and a fresh per-child token minted at spawn —
@@ -935,6 +974,14 @@ pub(crate) fn write_mcp_config(
     }
     if let Some(alma) = alma_mcp_server() {
         servers.insert("alma".to_string(), alma);
+    }
+    // A project's own tools: `<repo>/.mcp.json` (the same file Claude Code
+    // reads for a plain session) rides along in every session of that
+    // project, so a product's catalog, leads and voice are tools to the
+    // factory, not curl one-liners. `${repo}` in a command or argument is
+    // the checkout the session runs in, since a worktree moves.
+    for (name, server) in project_mcp_servers(repo) {
+        servers.entry(name).or_insert(server);
     }
     let config = serde_json::json!({ "mcpServers": servers });
     let path = repo.join(MCP_CONFIG_REL);

@@ -88,7 +88,7 @@ places, each entry with its repository, path and what it provides:
   Production products live in their own repositories beside it (`almaorb`,
   `myhoma`, `villanofyam`, `seataya`, `hotelnative`, `peakbuilders`,
   `dishorb`), each at `~/code/<name>` on the Mac and `/opt/<name>` on the VPS.
-- **The OpenResearch projects.** `curl -s http://127.0.0.1:4791/api/projects`
+- **The Research projects.** `curl -s http://127.0.0.1:4791/api/projects`
   (the local orx serving this session) lists every repository already under
   research or planning here, with its GitHub name and checkout path. A
   project already open is one someone is already thinking about; recall its

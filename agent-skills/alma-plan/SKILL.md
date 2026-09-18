@@ -88,7 +88,7 @@ fenced `json` block in this shape:
   considered, decision, consequences). Every brief names them.
 - `docs/inventory.md` opens with the table the research built under "What
   already exists" in `alma-research`: every company repository
-  (`gh repo list almaorb`) and every OpenResearch project
+  (`gh repo list almaorb`) and every Research project
   (`/api/projects`) the goal touches, each with its path and what it
   provides, and for each capability the goal needs, the repository it
   comes from. Nothing here is built from scratch: a dashboard extends the

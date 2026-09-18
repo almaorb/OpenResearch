@@ -680,13 +680,13 @@ mod tests {
         // The template's leading HTML comment (repo-reader documentation) must
         // be stripped — the prompt starts at the title.
         assert!(
-            md.starts_with("# OpenResearch agent"),
+            md.starts_with("# Research agent"),
             "template comment not stripped"
         );
         assert!(!md.contains("<!--"), "HTML comment leaked into the prompt");
         // Sanity: skill routing names every installed native skill without
         // duplicating the descriptions already surfaced by the harness.
-        assert!(md.contains("Use the available OpenResearch skills"));
+        assert!(md.contains("Use the available Research skills"));
         assert!(md.contains("execute important user flows"));
         assert!(!md.contains("orx skill <name>"));
         for skill in agent_skills::skills(SkillSet::Local) {

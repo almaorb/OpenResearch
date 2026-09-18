@@ -1,5 +1,5 @@
 # The catalog entry for this repository — see ~/code/examples/GLOSSARY.md.
-name      = "openresearch"
+name      = "research"
 tier      = "tooling"
 lineage   = "research"
 vertical  = "factory"

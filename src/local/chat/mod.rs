@@ -1837,8 +1837,7 @@ fn plan_auto_policy(tool_name: &str, tool_input: &Value) -> Option<PermissionDec
 /// The control API port of the editor most recently heard from, learnt from
 /// the `X-Alma-Control-Port` header it puts on every request it relays.
 /// Zero until an editor has spoken.
-static ALMA_CONTROL_PORT_SEEN: std::sync::atomic::AtomicU16 =
-    std::sync::atomic::AtomicU16::new(0);
+static ALMA_CONTROL_PORT_SEEN: std::sync::atomic::AtomicU16 = std::sync::atomic::AtomicU16::new(0);
 
 /// An editor relayed a request and named its control API port.
 pub fn note_alma_control_port(port: u16) {
@@ -5835,9 +5834,8 @@ impl ChatHost {
     /// `route` is the control API's path without the leading slash; the
     /// editor's reply comes back as it is, `{ok, ...}` or `{ok:false, error}`.
     pub async fn ask_alma(&self, route: &str, body: Value) -> Result<Value> {
-        let port = alma_control_port().ok_or_else(|| {
-            anyhow!("this needs the orx to have been started by the Alma IDE")
-        })?;
+        let port = alma_control_port()
+            .ok_or_else(|| anyhow!("this needs the orx to have been started by the Alma IDE"))?;
         // A voice control answers at once; filing a PDF in the vault chunks
         // and embeds it first. The body's `secs` is what the editor itself
         // allows the call, so it bounds the wait here too.

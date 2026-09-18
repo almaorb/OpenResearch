@@ -712,7 +712,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
   // The home, error, and loading screens leave projects populated but show no project.
   useEffect(() => {
     const name = startupError || uiState === null ? null : activeProject?.name;
-    document.title = name ? `${autoDir(name)} — OpenResearch` : "OpenResearch";
+    document.title = name ? `${autoDir(name)} — Research` : "Research";
   }, [startupError, uiState, activeProject]);
 
   const projectIdRef = useRef(projectId);

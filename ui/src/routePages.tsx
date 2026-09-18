@@ -76,7 +76,7 @@ export function ProjectsPage() {
   const retry = () => { void projectsQuery.refetch(); void stateQuery.refetch(); };
   const { status } = useUpdateStatus(runtime.kind === "local");
   useEffect(() => {
-    document.title = "OpenResearch";
+    document.title = "Research";
     if (!state) return;
     globalWorkspaceWriter.queue({
       ...(getRememberedGlobalWorkspace() ?? state.workspace ?? { railOpen: true, panelWidth: 760, experimentsView: "table" }),

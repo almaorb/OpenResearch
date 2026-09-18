@@ -916,7 +916,10 @@ fn project_mcp_servers(repo: &std::path::Path) -> Vec<(String, serde_json::Value
     let parsed: serde_json::Value = match serde_json::from_str(&text) {
         Ok(value) => value,
         Err(e) => {
-            eprintln!("orx up: {} is not valid JSON, its servers are skipped: {e}", path.display());
+            eprintln!(
+                "orx up: {} is not valid JSON, its servers are skipped: {e}",
+                path.display()
+            );
             return Vec::new();
         }
     };
@@ -928,7 +931,9 @@ fn project_mcp_servers(repo: &std::path::Path) -> Vec<(String, serde_json::Value
                 serde_json::Value::Array(items.into_iter().map(|v| resolve(v, repo)).collect())
             }
             serde_json::Value::Object(map) => serde_json::Value::Object(
-                map.into_iter().map(|(k, v)| (k, resolve(v, repo))).collect(),
+                map.into_iter()
+                    .map(|(k, v)| (k, resolve(v, repo)))
+                    .collect(),
             ),
             other => other,
         }

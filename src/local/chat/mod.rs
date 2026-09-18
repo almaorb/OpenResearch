@@ -821,6 +821,11 @@ pub struct WirePrompt {
     pub note: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub annotations: Vec<TextAnnotation>,
+    /// plan: the mode the approval resumed under (`supervised` when the plan
+    /// went to the Alma IDE's builder), so the strip can say where the plan
+    /// went after the card has collapsed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub resume_mode: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -898,6 +903,15 @@ impl WirePart {
     pub fn steer(id: impl Into<String>, text: impl Into<String>) -> Self {
         Self {
             kind: "steer".into(),
+            ..Self::text(id, text)
+        }
+    }
+
+    /// A line from the system rather than the model: what happened outside
+    /// the conversation, in the transcript where the person will see it.
+    pub fn notice(id: impl Into<String>, text: impl Into<String>) -> Self {
+        Self {
+            kind: "notice".into(),
             ..Self::text(id, text)
         }
     }
@@ -5757,18 +5771,19 @@ impl ChatHost {
     /// has already been delivered, so a (store-only) failure is logged rather
     /// than surfaced — an Err from `respond` would make the UI's catch clear
     /// `busy` on a turn that is actually still streaming.
-    /// Hands an approved plan to the Alma IDE's supervisor, which runs it
-    /// through this session one phase at a time.
+    /// Hands an approved plan to the Alma IDE's supervisor, which builds it
+    /// with Claude Code in a terminal of the editor, one phase at a time.
     ///
-    /// `Ok(Ok(()))` — the editor took the plan; `Ok(Err(reasons))` — the
-    /// editor refused it because a phase cannot be checked by a machine,
-    /// and the reasons are for the model; `Err` — the editor did not answer,
-    /// which leaves the card actionable for another try.
+    /// `Ok(Ok(run))` — the editor took the plan, and `run` says which run it
+    /// made; `Ok(Err(reasons))` — the editor refused it because a phase
+    /// cannot be checked by a machine, and the reasons are for the model;
+    /// `Err` — the editor did not answer, which leaves the card actionable
+    /// for another try.
     pub async fn hand_plan_to_alma(
         &self,
         session_id: &str,
         plan_markdown: &str,
-    ) -> Result<std::result::Result<(), String>> {
+    ) -> Result<std::result::Result<AcceptedPlan, String>> {
         let port = alma_control_port().ok_or_else(|| {
             anyhow!("supervised builds need this orx to have been started by the Alma IDE")
         })?;
@@ -5803,7 +5818,18 @@ impl ChatHost {
             .await
             .map_err(|error| anyhow!("the Alma IDE answered with something else: {error}"))?;
         if reply.get("ok").and_then(Value::as_bool) == Some(true) {
-            return Ok(Ok(()));
+            let id = reply
+                .get("blueprint")
+                .and_then(Value::as_i64)
+                .ok_or_else(|| anyhow!("the Alma IDE took the plan but named no run"))?;
+            let phases = reply
+                .get("phases")
+                .and_then(Value::as_u64)
+                .ok_or_else(|| anyhow!("the Alma IDE took the plan but counted no phases"))?;
+            return Ok(Ok(AcceptedPlan {
+                id,
+                phases: usize::try_from(phases)?,
+            }));
         }
         let problems = reply
             .get("problems")
@@ -5826,6 +5852,36 @@ impl ChatHost {
                     .unwrap_or("no reason given")
             )),
         }
+    }
+
+    /// Puts one line of the system's own into the transcript, where the
+    /// person reads it: what happened outside the conversation. The line
+    /// rides its own assistant message, as a prompt card does, because the
+    /// running turn owns its in-flight message's parts and would clobber a
+    /// part appended there at its next flush.
+    pub fn post_notice(&self, session_id: &str, text: &str) -> Result<WireMessage> {
+        let part_id = format!("notice-{}", uuid::Uuid::new_v4());
+        let mut message = WireMessage {
+            id: format!("msg_{part_id}"),
+            role: "assistant".into(),
+            parts: vec![WirePart::notice(part_id, text)],
+            created_at: now_ms(),
+            completed_at: None,
+            parent_id: None,
+        };
+        message.parent_id = Store::open()?.upsert_chat_message_on_branch(&StoredChatMessage {
+            id: message.id.clone(),
+            session_id: session_id.to_string(),
+            role: message.role.clone(),
+            parts_json: serde_json::to_string(&message.parts)?,
+            created_at: message.created_at,
+            completed_at: message.completed_at,
+            parent_id: None,
+            base_native_session_id: None,
+            result_native_session_id: None,
+        })?;
+        self.emit("chat.message", message_json(&message, session_id));
+        Ok(message)
     }
 
     /// One call into the Alma IDE's control API, for the dashboard's voice
@@ -6146,6 +6202,14 @@ fn default_true() -> bool {
 /// orx session id, and the native session id, and each harness pulls what it
 /// needs (an opencode reply reaches `host.opencode` / `host.http`, exactly as
 /// `interrupt` does).
+/// What the Alma IDE said when it took a plan: the run it made of it, and
+/// how many phases the run has.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AcceptedPlan {
+    pub id: i64,
+    pub phases: usize,
+}
+
 pub struct ResumeCtx {
     pub host: Arc<ChatHost>,
     /// The orx session id (for the `is_busy` liveness check).
@@ -6233,6 +6297,7 @@ fn stamp_resolved(prompt: &mut WirePrompt, answer: Option<&PromptAnswer>) {
         prompt.approved = Some(answer.approve);
         prompt.note = answer.note.clone().filter(|n| !n.trim().is_empty());
         prompt.annotations = answer.annotations.clone();
+        prompt.resume_mode = answer.resume_mode.clone();
     }
 }
 

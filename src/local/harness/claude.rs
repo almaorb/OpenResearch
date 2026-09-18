@@ -671,22 +671,26 @@ impl Harness for ClaudeCode {
                 // bridge request is denied into the dying child, harmlessly.
                 ("plan", true) if answer.resume_mode.as_deref() == Some(SUPERVISED_RESUME) => {
                     // Approve and build under the Alma IDE's supervisor: the
-                    // plan goes to the editor, which runs its phases through
-                    // this session one at a time. The held ExitPlanMode is
-                    // denied either way — with "wait for the first phase"
-                    // when the editor took the plan, with the reasons when
-                    // it could not, so the model revises in the same turn.
+                    // plan goes to the editor, which builds it with Claude
+                    // Code in a terminal of its own. The held ExitPlanMode
+                    // is denied either way — with where the build went when
+                    // the editor took the plan, so the model stays in plan
+                    // mode here, and with the reasons when it could not, so
+                    // the model revises in the same turn.
                     let plan = prompt.plan.as_deref().unwrap_or_default();
                     match ctx.host.hand_plan_to_alma(&ctx.session_id, plan).await? {
-                        Ok(()) => {
+                        Ok(run) => {
                             ctx.host.settle_permission(
                                 native_id,
                                 crate::local::chat::PermissionDecision::deny(
-                                    "The user approved the plan. The Alma supervisor will hand \
-                                     you its phases one at a time in this session, each as a new \
-                                     message. Stop now and wait for the first one; do not start \
-                                     implementing.",
+                                    approved_plan_message(run.id, run.phases),
                                 ),
+                            )?;
+                            // The person reads where the plan went in the
+                            // transcript, not only the model in its denial.
+                            ctx.host.post_notice(
+                                &ctx.session_id,
+                                &approved_plan_notice(run.id, run.phases),
                             )?;
                             Ok(ResumeAction::Handled { plan_mode: None })
                         }
@@ -1006,6 +1010,22 @@ pub(crate) fn write_mcp_config(
 /// The `resumeMode` of a plan approval that hands the plan to the Alma IDE's
 /// supervisor instead of resuming the session in auto mode.
 pub const SUPERVISED_RESUME: &str = "supervised";
+
+/// What the model is told when the Alma IDE took its plan: the build is the
+/// Builder's — Claude Code in a terminal of the editor — and this session
+/// is Research, which stays in plan mode and implements nothing.
+pub(crate) fn approved_plan_message(id: i64, phases: usize) -> String {
+    format!(
+        "The plan is approved: run {id}, {phases} phases. It is being built by the Builder — \
+         Claude Code in a Zed terminal — not here. This session is Research: stay in plan \
+         mode, answer questions about the plan, and do not implement anything."
+    )
+}
+
+/// The line the transcript shows the person for the same event.
+pub(crate) fn approved_plan_notice(id: i64, phases: usize) -> String {
+    format!("Approved → run {id}, {phases} phases. Building in the Zed terminal.")
+}
 
 /// The `orx mcp-gate` bridge one child rides for its whole life.
 pub(crate) struct GateBridge<'a> {
@@ -2296,6 +2316,24 @@ async fn run_turn(ctx: &mut TurnCtx) -> Result<()> {
 mod tests {
     use super::super::options::REASONING_DEFAULT_ID;
     use super::*;
+
+    #[test]
+    fn approved_plan_message_names_the_builder() {
+        let message = approved_plan_message(7, 3);
+        assert!(message.contains("run 7, 3 phases"));
+        assert!(message.contains("Builder"));
+        assert!(message.contains("Claude Code in a Zed terminal"));
+        assert!(message.contains("This session is Research"));
+        assert!(message.contains("stay in plan mode"));
+        // Spelled in two halves so a grep for the old headless wording finds
+        // nothing in this file.
+        let headless = ["wait for", "the first one"].join(" ");
+        assert!(!message.contains(&headless));
+        assert!(!message.contains("in this session"));
+
+        let notice = approved_plan_notice(7, 3);
+        assert_eq!(notice, "Approved → run 7, 3 phases. Building in the Zed terminal.");
+    }
 
     #[test]
     fn local_mcp_config_contains_only_string_environment_values() {

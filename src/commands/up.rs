@@ -6073,9 +6073,9 @@ async fn local_runtime(headers: HeaderMap) -> Json<Value> {
         // the strip offers that only when it is true.
         "alma": crate::local::chat::alma_supervisor_available(),
         // The address this request reached the server at. The Alma IDE
-        // relays the page's HTTP from its own `alma://openresearch` origin,
+        // relays the page's HTTP from its own `alma://research` origin,
         // which cannot carry a WebSocket upgrade; the page dials this for
-        // one instead (see `ALMA_PAGE_ORIGIN`).
+        // one instead (see `ALMA_PAGE_ORIGINS`).
         "loopback": headers.get(header::HOST).and_then(|value| value.to_str().ok()),
     }))
 }

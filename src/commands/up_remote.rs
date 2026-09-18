@@ -1152,15 +1152,17 @@ async fn gateway_loopback_guard(request: Request, next: Next) -> Response {
     loopback_guard_inner(request, next, false).await
 }
 
-/// The origin of the dashboard when the Alma IDE serves it inside the editor.
-const ALMA_PAGE_ORIGIN: &str = "alma://openresearch";
+/// The origins of the dashboard when the Alma IDE serves it inside the
+/// editor: `alma://research/`, and the host it was served from until
+/// 2026-09-18, which an editor built before then still uses.
+const ALMA_PAGE_ORIGINS: [&str; 2] = ["alma://research", "alma://openresearch"];
 
 /// Whether `origin` is the Alma IDE's page dialing in directly. The editor
 /// relays the page's HTTP from its own scheme, which cannot carry a
 /// WebSocket upgrade, so those arrive here cross-site under this origin.
 /// Only an orx the editor is in front of accepts it.
 pub(crate) fn alma_page_origin(origin: &str) -> bool {
-    origin == ALMA_PAGE_ORIGIN && crate::local::chat::alma_control_port().is_some()
+    ALMA_PAGE_ORIGINS.contains(&origin) && crate::local::chat::alma_control_port().is_some()
 }
 
 async fn loopback_guard_inner(request: Request, next: Next, allow_dev_origin: bool) -> Response {

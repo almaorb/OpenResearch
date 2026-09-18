@@ -1005,7 +1005,7 @@ export type RuntimeInfo =
       version: string;
       alma?: boolean;
       /** The `host:port` this orx was reached at. Inside the Alma IDE the
-       * page lives at `alma://openresearch` and its HTTP is relayed; a
+       * page lives at `alma://research` and its HTTP is relayed; a
        * WebSocket must dial this loopback address itself. */
       loopback?: string | null;
     }

@@ -6,7 +6,7 @@ import { useRuntime } from "../RemoteRuntime";
 import { mountTerminal } from "./terminal";
 
 /** Where this page's WebSockets go. Inside the Alma IDE the page is served
- * from `alma://openresearch`, a scheme the editor relays over HTTP only, so a
+ * from `alma://research`, a scheme the editor relays over HTTP only, so a
  * socket dials the loopback address orx reports instead. */
 function webSocketBase(runtime: RuntimeInfo): string {
   if (location.protocol === "alma:" && runtime.kind === "local" && runtime.loopback) {

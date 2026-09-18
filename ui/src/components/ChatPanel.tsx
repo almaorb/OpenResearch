@@ -98,6 +98,7 @@ import {
   setChatSessionPermissionMode,
   setChatSessionPlanMode,
   type FirstActionSurface,
+  type AlmaDictation,
   type ChatImageAttachment,
   type ChatMessage,
   type ChatPart,
@@ -5141,6 +5142,24 @@ export function ChatPanel({
     pinTranscriptToBottom();
   }, [pinTranscriptToBottom]);
 
+  // Dictation from the Alma IDE's orb in Transcribe mode: the words join the
+  // draft unsent, and "send it" sends it. The send is deferred to the render
+  // after the draft changed, because `send` reads the draft of the render it
+  // was made in and the words and the command can arrive in one poll.
+  const [voiceSend, setVoiceSend] = useState(0);
+  const onDictation = useCallback(({ text, enter }: AlmaDictation) => {
+    if (text) {
+      setDraft((current) => (current.trim() ? `${current.trimEnd()} ${text}` : text));
+    }
+    if (enter) setVoiceSend((count) => count + 1);
+  }, []);
+  useEffect(() => {
+    if (!voiceSend) return;
+    setVoiceSend(0);
+    if (draft.trim()) void send();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a "send it" fires this
+  }, [voiceSend]);
+
   /** `queue` (the ⌘/Ctrl+Enter chord) parks the message even on a harness that steers. */
   async function send({ queue = false }: { queue?: boolean } = {}) {
     captureUiEvent({
@@ -6467,10 +6486,12 @@ export function ChatPanel({
                 </Button>
               )}
               <div className="min-w-0 flex-1" />
-              {/* Inside the Alma IDE the orb's mic sits here: what is said goes
-                into this session as a message and its replies are read aloud. */}
+              {/* Inside the Alma IDE the orb's mic sits here: in Transcribe
+                mode what is said is typed into this composer, in Plan mode it
+                goes into this session as a message and the replies are read
+                aloud. */}
               {runtime.kind === "local" && runtime.alma === true && (
-                <AlmaVoiceControls sessionOpen={!!openSession} />
+                <AlmaVoiceControls onDictation={onDictation} />
               )}
               {/* The model picker reflects the open session (harness locked once it
                 exists); the global default only applies before the first

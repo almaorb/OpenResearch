@@ -38,14 +38,32 @@ fenced `json` block in this shape:
   checked that way, split it or rewrite it until it can.
 - `expect` is one of `"success"` (exits zero, the default), `"exit:N"`,
   `"contains:TEXT"`, `"excludes:TEXT"`.
+- A check's output is what the builder reads when it fails. Do not filter
+  it through `grep … | head -1`: a run that failed for a locked database
+  came back as an empty line and a zero exit, and the builder had nothing
+  to fix. Run the command plain and put the condition in `expect`
+  (`"contains:test result: ok"`).
 - Prefer checks that already exist: the project's tests, its build, its
   linter. A check that already passes on the untouched tree proves nothing
   on its own — pair it with one that only goes green once the phase's work
   exists (`test -s NEW_FILE`, `cargo test new_test_name`, `grep -q`).
+- Say which is which in the description: `VERIFY (passes today): …` for a
+  check that pins what the research found to exist, `BUILD: …` for one that
+  fails until the phase's work is there. Every `VERIFY` check is run in the
+  worktree the moment the plan is approved, and one that fails sends the
+  plan back with its output — the picture of the tree was wrong, so fix
+  the plan, not the check. (A `VERIFY` check in the browser is left for the
+  run.) A phase should carry both: what it starts from, and what it adds.
 - Order the phases so each one leaves the tree working. Do not number them;
   order is position in the list. Four to eight phases is usually right; a
   phase is an hour or two of work.
-- A check may probe a URL (`{"description": ..., "http": "http://127.0.0.1:3000/health",
+- The run has a port of its own, `$ALMA_PORT`, set in every check's shell
+  and the builder's, and expanded in `http` and `browser` URLs. Anything a
+  phase starts to be checked listens on it — never on a fixed number, which
+  the next run or the product's own instance would be sitting on. Say so in
+  the phase: "serve on `$ALMA_PORT`"; check
+  `http://127.0.0.1:$ALMA_PORT/health`.
+- A check may probe a URL (`{"description": ..., "http": "http://127.0.0.1:$ALMA_PORT/health",
   "expect_status": 200}`) or a page in the editor's own browser
   (`{"description": ..., "browser": "<url>", "script": "<javascript that
   evaluates to a truthy value once the page is right>"}`). **A phase that
@@ -68,6 +86,32 @@ fenced `json` block in this shape:
   `docs/whitepaper.md` (the problem, prior art, the approach and why) and
   one `docs/adr/NNNN-<slug>.md` per significant choice (context, options
   considered, decision, consequences). Every brief names them.
+- `docs/inventory.md` opens with the table the research built under "What
+  already exists" in `alma-research`: every company repository
+  (`gh repo list almaorb`) and every OpenResearch project
+  (`/api/projects`) the goal touches, each with its path and what it
+  provides, and for each capability the goal needs, the repository it
+  comes from. Nothing here is built from scratch: a dashboard extends the
+  dashboard, sign-in is the dashboard's Google sign-in, a voice surface is
+  the orb, a product starts from `orb-starter` or, until it exists, from
+  the parts `BRICKS.md` names. Each phase's brief names the repository,
+  crate or component it builds on, by path; a phase that scaffolds, copies
+  by hand or reimplements something the inventory lists is a phase the
+  human will send back, and a capability the inventory marks as absent
+  says which repositories were checked.
+- `docs/whitepaper.md` opens with the product sections the research wrote
+  under "Before the shape": the thesis, who it is for, what we will not
+  build, who pays, the hazard designed out, the gates. Each phase's prose
+  names the differentiator it serves; a phase that serves none is the first
+  candidate to cut. The hazard's design lands in the phase that writes the
+  schema, not in a later "hardening" phase — a vault or a token split is
+  cheap in the first migration and a rewrite in the tenth.
+- The plan lives inside the standing defaults of `alma-research` (our own
+  VPS behind Caddy, the SPA + Rust binary + SQLite base model, Opus 5 and
+  Gemini 3.8 Flash, never Haiku, no managed platform services). A phase that
+  provisions a Vercel project, a Supabase database or an AI-SDK gateway is a
+  phase the human will reject; an ADR that departs from a default names it
+  and says why.
 - The prose above the block and the block must agree. The block is what
   runs.
 

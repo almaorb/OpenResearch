@@ -17,20 +17,39 @@ company's memory, THIS project's code, and the browser the human is watching.
    implies. Past conversations, decisions and research notes come back with
    where they came from. A plan that repeats last month's research is wasted;
    a decision that was already made is not yours to reopen without saying so.
-2. **What does the code already do?** `rag_search` the open project with the
-   question a newcomer would ask ("where do we decide whether a phase
-   passed?"), not a grep string. If it answers `indexed: false`, call
-   `rag_index` once and search again. Then read the files it names. Never
-   claim the code does or does not do something you have not read.
+2. **What does the code already do, and what do the documents say?**
+   `rag_search` the open project with the question a newcomer would ask
+   ("where do we decide whether a phase passed?"), not a grep string. It
+   answers from two places at once: the project's CODE, and its VAULT — the
+   documents kept for it and in `shared` (the client's brief as a PDF, the
+   spec, a saved API page), which a repository cannot hold. A vault hit
+   carries the document's path; read the whole document when a passage is
+   not enough. If it answers `indexed: false`, the hint says what is
+   missing: `rag_index` for the code (give it `~/code/examples` and the
+   production sibling the goal is nearest to, so the company's own code
+   answers too), `vault_add` for a document the human handed you or a
+   reference you fetched. `vault_list` shows what is already there. Then
+   read the files it names. Never claim the code or the documents do or do
+   not say something you have not read.
 3. **What have we already built?** Every product here is assembled from
    the company's own parts, never from scratch; find them before looking
    anywhere else. See "What already exists" below for where the inventory
    comes from and what the report must say about it.
 4. **What exists elsewhere?** GitHub through `gh` in Bash — `gh search repos
    "<terms>" --sort stars --limit 10`, `gh repo view <owner/repo>`, `gh api
-   repos/<owner>/<repo>/contents/<path>` — and the web through WebSearch and
-   WebFetch. Prefer references you can point at: a repository, a file, a doc
-   page, a release note. Say how old and how maintained each one is.
+   repos/<owner>/<repo>/contents/<path>` — and the web through WebSearch to
+   find pages and **the Alma browser to read them**: `browser_new_tab` the
+   URL (your own tab, never the ones the human has up), `browser_read` for
+   the text, `browser_eval` for a price, a spec table or a number the page
+   renders with JavaScript, `browser_screenshot` when the layout is the
+   fact. It is the CEF browser the human is watching — a real session with
+   their cookies — so vendor pages, configurators and stores that answer a
+   scripted fetch with a block page (B&H, Dell, HP, most price lists) open
+   there like they do for a person. WebFetch is for raw files and JSON APIs
+   only; when it comes back blocked, truncated or without the number, open
+   the page in the browser before writing "check the listing". Prefer
+   references you can point at: a repository, a file, a doc page, a release
+   note. Say how old and how maintained each one is.
 5. **What is the product?** Before any shape is chosen, answer the
    questions under "Before the shape" below, in the report. A shape chosen
    before the thesis is a stack looking for a product.

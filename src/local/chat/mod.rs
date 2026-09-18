@@ -1834,12 +1834,33 @@ fn plan_auto_policy(tool_name: &str, tool_input: &Value) -> Option<PermissionDec
     }
 }
 
-/// The Alma IDE's control API port, set on `orx up` by the editor that
-/// started it. Absent outside the editor, where nothing can supervise.
+/// The control API port of the editor most recently heard from, learnt from
+/// the `X-Alma-Control-Port` header it puts on every request it relays.
+/// Zero until an editor has spoken.
+static ALMA_CONTROL_PORT_SEEN: std::sync::atomic::AtomicU16 =
+    std::sync::atomic::AtomicU16::new(0);
+
+/// An editor relayed a request and named its control API port.
+pub fn note_alma_control_port(port: u16) {
+    ALMA_CONTROL_PORT_SEEN.store(port, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// The Alma IDE's control API port. Absent outside the editor, where nothing
+/// can supervise.
+///
+/// The editor that relays requests here wins over the `ALMA_CONTROL_PORT` the
+/// starting editor set: `orx up` outlives the editor that started it, and the
+/// next editor — on another port, if the first was a test instance — reuses
+/// whatever answers at 4791. Pinned to the birth environment, every voice
+/// control and every session's `alma` MCP server would dial a port nobody
+/// listens on any more.
 pub fn alma_control_port() -> Option<u16> {
-    std::env::var("ALMA_CONTROL_PORT")
-        .ok()
-        .and_then(|port| port.trim().parse().ok())
+    match ALMA_CONTROL_PORT_SEEN.load(std::sync::atomic::Ordering::Relaxed) {
+        0 => std::env::var("ALMA_CONTROL_PORT")
+            .ok()
+            .and_then(|port| port.trim().parse().ok()),
+        port => Some(port),
+    }
 }
 
 pub fn alma_supervisor_available() -> bool {
@@ -5815,12 +5836,16 @@ impl ChatHost {
     /// editor's reply comes back as it is, `{ok, ...}` or `{ok:false, error}`.
     pub async fn ask_alma(&self, route: &str, body: Value) -> Result<Value> {
         let port = alma_control_port().ok_or_else(|| {
-            anyhow!("the voice controls need this orx to have been started by the Alma IDE")
+            anyhow!("this needs the orx to have been started by the Alma IDE")
         })?;
+        // A voice control answers at once; filing a PDF in the vault chunks
+        // and embeds it first. The body's `secs` is what the editor itself
+        // allows the call, so it bounds the wait here too.
+        let seconds = body["secs"].as_u64().unwrap_or(10).clamp(1, 1800);
         self.http
             .post(format!("http://127.0.0.1:{port}/{route}"))
             .json(&body)
-            .timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(seconds + 5))
             .send()
             .await
             .map_err(|error| anyhow!("the Alma IDE did not answer: {error}"))?

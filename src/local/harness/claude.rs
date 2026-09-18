@@ -1011,21 +1011,19 @@ pub(crate) struct GateBridge<'a> {
 
 /// The Alma IDE's MCP server, when this `orx up` was started by the editor.
 ///
-/// The editor sets `ALMA_MCP_SERVER` (the server script) and
-/// `ALMA_CONTROL_PORT` (its loopback control API) on `orx up`; the server
-/// gives every session the editor's browser, terminals, event bus, the
-/// project's semantic index and the dashboard's memory. Outside the editor
-/// neither variable is set and sessions are exactly upstream's.
+/// The editor sets `ALMA_MCP_SERVER` (the server script) on `orx up` and
+/// names its loopback control API on every request it relays (see
+/// [`crate::local::chat::alma_control_port`]); the server gives every session
+/// the editor's browser, terminals, event bus, the project's semantic index
+/// and the dashboard's memory. Outside the editor the variable is not set and
+/// sessions are exactly upstream's.
 pub(crate) fn alma_mcp_server() -> Option<serde_json::Value> {
     let script = std::env::var("ALMA_MCP_SERVER").ok()?;
     let script = script.trim();
     if script.is_empty() {
         return None;
     }
-    let port = std::env::var("ALMA_CONTROL_PORT")
-        .ok()
-        .and_then(|port| port.trim().parse::<u16>().ok())
-        .unwrap_or(7897);
+    let port = crate::local::chat::alma_control_port().unwrap_or(7897);
     let node = crate::local::shell_env::find_on_path("node")
         .or_else(|| {
             // The editor may start `orx up` before a login shell has put

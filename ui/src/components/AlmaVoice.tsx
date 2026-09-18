@@ -1,16 +1,24 @@
 // The Alma IDE's voice orb, drawn in this composer: a mic, the mode, and
 // the words the orb heard while the mic was open. The engine — the
-// microphone, the Gemini Live session, the tidy-up, the delivery into this
-// session as a message — stays in the editor; this is only its face here,
-// through `/api/alma/*`. It renders nothing outside the editor.
+// microphone, the Gemini Live session, the tidy-up, the delivery — stays in
+// the editor; this is only its face here, through `/api/alma/*`. It renders
+// nothing outside the editor.
+//
+// The mode is the orb's, chosen from the menu, and the mic opens in whichever
+// is chosen: Transcribe types into this composer, Plan sends into the session
+// on screen and reads the replies aloud, Assistant and Build are the orb's
+// own business (the phone, the mailbox, the terminal) and only borrow the
+// button.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Mic, Square } from "lucide-react";
 import {
+  almaDictationOf,
   almaVoiceTalk,
   getAlmaVoiceState,
   readAlmaBus,
   setAlmaVoiceMode,
   type AlmaBusEvent,
+  type AlmaDictation,
   type AlmaVoiceMode,
   type AlmaVoiceState,
 } from "../api";
@@ -29,8 +37,26 @@ const BUS_POLL_MS = 900;
  * gathers utterances for three seconds before sending them into the session;
  * by then the message itself is in the transcript above. */
 const HEARD_LINGER_MS = 6000;
+/** How long the transcript is still read after the mic closes. The last
+ * sentence is tidied by a network call after it was heard, and a "send it"
+ * spoken just before the button is pressed must still land. */
+const BUS_LINGER_MS = 10000;
 
 const MODES: AlmaVoiceMode[] = ["plan", "assistant", "build", "transcribe"];
+
+/** What pressing the mic does in this mode. */
+function talkTitle(mode: AlmaVoiceMode): string {
+  switch (mode) {
+    case "transcribe":
+      return m.alma_voice_talk_transcribe();
+    case "plan":
+      return m.alma_voice_talk_plan();
+    case "assistant":
+      return m.alma_voice_talk_assistant();
+    case "build":
+      return m.alma_voice_talk_build();
+  }
+}
 
 function modeLabel(mode: AlmaVoiceMode): string {
   switch (mode) {
@@ -46,18 +72,20 @@ function modeLabel(mode: AlmaVoiceMode): string {
 }
 
 type Props = {
-  /** Whether the composer belongs to an open session. The mic in Plan mode
-   * dictates into the session on screen, so without one it stays off. */
-  sessionOpen: boolean;
+  /** Dictation addressed to this composer (Transcribe mode): text to append
+   * to the message box, or `enter` alone to send what is there. */
+  onDictation: (dictation: AlmaDictation) => void;
 };
 
-export function AlmaVoiceControls({ sessionOpen }: Props) {
+export function AlmaVoiceControls({ onDictation }: Props) {
   const [state, setState] = useState<AlmaVoiceState | null>(null);
   const [heard, setHeard] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const modes = usePopover();
   const cursor = useRef(0);
   const heardTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const onDictationRef = useRef(onDictation);
+  onDictationRef.current = onDictation;
 
   const refresh = useCallback(async () => {
     try {
@@ -75,11 +103,22 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
   }, [refresh]);
 
   const listening = state?.listening === true;
-
-  // Show what the orb heard while the mic is open. The cursor starts at the
-  // bus head so an old transcript does not replay on the first open.
+  // The bus is read while the mic is open and for a while after it closes.
+  const [reading, setReading] = useState(false);
   useEffect(() => {
-    if (!listening) return;
+    if (listening) {
+      setReading(true);
+      return;
+    }
+    const timer = setTimeout(() => setReading(false), BUS_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [listening]);
+
+  // Show what the orb heard while the mic is open, and hand dictation
+  // addressed to this composer on. The cursor starts at the bus head so an
+  // old transcript does not replay on the first open.
+  useEffect(() => {
+    if (!reading) return;
     let cancelled = false;
     const showHeard = (text: string) => {
       setHeard(text);
@@ -98,6 +137,10 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
         );
         const last = spoken[spoken.length - 1];
         if (last) showHeard(last.text);
+        for (const event of reply.events) {
+          const dictation = almaDictationOf(event, window.location.href);
+          if (dictation) onDictationRef.current(dictation);
+        }
       } catch {
         // Missing one poll only delays the line by a beat.
       }
@@ -108,7 +151,7 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
       cancelled = true;
       clearInterval(timer);
     };
-  }, [listening]);
+  }, [reading]);
 
   useEffect(
     () => () => {
@@ -121,21 +164,13 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
     if (busy) return;
     setBusy(true);
     try {
-      if (listening || state?.speaking) {
-        setState(await almaVoiceTalk("stop"));
-        return;
-      }
-      // Talking into a session is Plan mode: the words go into the
-      // transcript above and the orb reads the replies aloud. Anything else
-      // is the editor's business and is chosen from the menu.
-      if (state?.mode !== "plan") await setAlmaVoiceMode("plan");
-      setState(await almaVoiceTalk("start"));
+      setState(await almaVoiceTalk(listening || state?.speaking ? "stop" : "start"));
     } catch {
       await refresh();
     } finally {
       setBusy(false);
     }
-  }, [busy, listening, refresh, state?.mode, state?.speaking]);
+  }, [busy, listening, refresh, state?.speaking]);
 
   const chooseMode = useCallback(
     async (mode: AlmaVoiceMode) => {
@@ -159,7 +194,7 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
         ? m.alma_voice_stop_listening()
         : state.starting
           ? m.alma_voice_starting()
-          : m.alma_voice_talk();
+          : talkTitle(mode);
 
   return (
     <div className="alma-voice flex min-w-0 items-center gap-1">
@@ -216,7 +251,7 @@ export function AlmaVoiceControls({ sessionOpen }: Props) {
         title={title}
         aria-label={title}
         aria-pressed={listening}
-        disabled={off || busy || (!sessionOpen && !listening)}
+        disabled={off || busy}
         onClick={() => void toggleMic()}
       >
         {state?.speaking ? <Square size={16} /> : <Mic size={16} className={listening ? "text-primary" : undefined} />}

@@ -63,6 +63,20 @@ normal repository tools for code and file inspection. Use this project id
   must recreate dependencies from committed snapshots independently of
   session environments; preserve fixed run contracts.
 
+## Reading the web
+
+When the Alma IDE's tools are present (`mcp__alma__browser_*`), the browser
+is the default way to read a web page — not WebFetch. Open the page in a tab
+of your own (`browser_new_tab`; leave the human's tabs alone), read it with
+`browser_read`, take a number or a table the page renders with JavaScript
+through `browser_eval`, and `browser_screenshot` when the layout is the
+fact. It is the human's own browser session, so vendor stores,
+configurators and price lists that block scripted fetches open as they do
+for a person. WebFetch is for raw files and JSON APIs; a fetch that comes
+back blocked, truncated or without the number is a reason to open the page
+in the browser, not a caveat for the report. Do not ask before opening a
+new tab.
+
 ## Evidence and links in chat
 
 Ground substantive claims about this project's code, files, artifacts, or

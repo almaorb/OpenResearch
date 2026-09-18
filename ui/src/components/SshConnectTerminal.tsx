@@ -1,8 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import type { SlurmPreflight, SshPreflight } from "../api";
+import type { RuntimeInfo, SlurmPreflight, SshPreflight } from "../api";
 import { ltr } from "../i18n";
 import { m } from "../paraglide/messages.js";
+import { useRuntime } from "../RemoteRuntime";
 import { mountTerminal } from "./terminal";
+
+/** Where this page's WebSockets go. Inside the Alma IDE the page is served
+ * from `alma://openresearch`, a scheme the editor relays over HTTP only, so a
+ * socket dials the loopback address orx reports instead. */
+function webSocketBase(runtime: RuntimeInfo): string {
+  if (location.protocol === "alma:" && runtime.kind === "local" && runtime.loopback) {
+    return `ws://${runtime.loopback}`;
+  }
+  const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${location.host}`;
+}
 
 export type SshConnectResult =
   | { backend: "ssh"; result: SshPreflight }
@@ -113,6 +125,7 @@ function CommandTerminal({ path, label, heightClass = "h-40", active = true, onC
   onComplete: (value: unknown) => boolean;
   onError?: (error: string) => void;
 }) {
+  const socketBase = webSocketBase(useRuntime());
   const wrapRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<ReturnType<typeof mountTerminal>["terminal"] | null>(null);
   const completeRef = useRef(onComplete);
@@ -127,9 +140,7 @@ function CommandTerminal({ path, label, heightClass = "h-40", active = true, onC
     const { terminal, dispose } = mountTerminal(wrap, false, true);
     terminalRef.current = terminal;
     terminal.focus();
-    const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const url = new URL(path, `${protocol}//${location.host}`);
-    const socket = new WebSocket(url);
+    const socket = new WebSocket(new URL(path, socketBase));
     socket.binaryType = "arraybuffer";
     let completed = false;
     let failed = false;
@@ -192,7 +203,7 @@ function CommandTerminal({ path, label, heightClass = "h-40", active = true, onC
       terminalRef.current = null;
       dispose();
     };
-  }, [path]);
+  }, [path, socketBase]);
 
   useEffect(() => {
     const terminal = terminalRef.current;

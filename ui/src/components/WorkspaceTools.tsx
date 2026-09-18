@@ -4,7 +4,7 @@ import { statusLabel } from "./StatusBadge";
 import { getComputeSettingsQuery } from "../queries/settings";
 import { TARGET_LABELS } from "../computeTargets";
 import { useEffect, useMemo, useRef } from "react";
-import { FlaskConical, FolderOpen, Package, GitBranch, Cpu } from "lucide-react";
+import { Archive, FlaskConical, FolderOpen, Package, GitBranch, Cpu } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { getSessionWorktreeQuery } from "../queries/files";
 import { countChanges, parseDiffFiles } from "./GitDiff";
@@ -12,13 +12,13 @@ import { m } from "../paraglide/messages.js";
 import { BackendLogo } from "./BackendLogos";
 import { IconButton, MenuItem, StatusIndicator } from "./ui";
 
-export function WorkspaceTools({ expanded, experiments, runs, onOpenExperiment, rightOffset, activeView, projectId, onCompute, sessionId, busy, onChanges, onFiles, onArtifacts, onExperiments }: {
+export function WorkspaceTools({ expanded, experiments, runs, onOpenExperiment, rightOffset, activeView, projectId, onCompute, sessionId, busy, onChanges, onFiles, onArtifacts, onVault, onExperiments }: {
   expanded: boolean;
   experiments: Experiment[];
   runs: Run[];
   onOpenExperiment: (id: string, runId: string) => void;
   rightOffset?: number;
-  activeView: "files" | "artifacts" | "experiments" | null;
+  activeView: "files" | "artifacts" | "vault" | "experiments" | null;
   projectId: string;
   onCompute: () => void;
   sessionId: string | null;
@@ -26,6 +26,7 @@ export function WorkspaceTools({ expanded, experiments, runs, onOpenExperiment, 
   onChanges: () => void;
   onFiles: () => void;
   onArtifacts: () => void;
+  onVault: () => void;
   onExperiments: () => void;
 }) {
   const experimentRows = activeWorkspaceRuns(experiments, runs, sessionId);
@@ -35,6 +36,7 @@ export function WorkspaceTools({ expanded, experiments, runs, onOpenExperiment, 
   const items = [
     { id: "files", label: m.app_files(), Icon: FolderOpen, onClick: onFiles },
     { id: "artifacts", label: m.app_artifacts(), Icon: Package, onClick: onArtifacts },
+    { id: "vault", label: m.app_vault(), Icon: Archive, onClick: onVault },
     { id: "experiments", label: m.app_experiments(), Icon: FlaskConical, onClick: onExperiments },
   ];
   return (

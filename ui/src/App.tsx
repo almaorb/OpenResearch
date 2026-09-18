@@ -74,6 +74,7 @@ import {
   Terminal,
   Users,
   X,
+  Archive,
 } from "lucide-react";
 
 import {
@@ -100,6 +101,7 @@ import { SubagentTab } from "./components/SubagentTab";
 import { CodeTab, type CodeView } from "./components/CodeTab";
 import { WorktreeTab, type WorktreeView } from "./components/WorktreeTab";
 import { ArtifactsTab, findArtifactEntry } from "./components/ArtifactsTab";
+import { VaultTab } from "./components/VaultTab";
 import { SkillsTab } from "./components/SkillsTab";
 import { ClosableTab } from "./components/ClosableTab";
 import { DetailDrawer, type ExperimentView } from "./components/DetailDrawer";
@@ -395,6 +397,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
   const [experimentsTabOpen, setExperimentsTabOpen] = useState(false);
   const [filesTabOpen, setFilesTabOpen] = useState(false);
   const [artifactsTabOpen, setArtifactsTabOpen] = useState(false);
+  const [vaultTabOpen, setVaultTabOpen] = useState(false);
   const [expTabs, setExpTabs] = useState<ExpViewDef[]>([]);
   const [fileTabs, setFileTabs] = useState<FileViewDef[]>([]);
   const fileScrollPositionsRef = useRef(new Map<string, FileScrollPosition>());
@@ -594,6 +597,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
     experimentsTabOpen,
     filesTabOpen,
     artifactsTabOpen,
+    vaultTabOpen,
     expTabs,
     fileTabs,
     planTabs,
@@ -607,7 +611,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
     scope,
     panelOpen,
     panelMax,
-  }), [rightTab, tabHistory, experimentsTabOpen, filesTabOpen, artifactsTabOpen, expTabs, fileTabs, planTabs, subagentTabs, codeTabs, contentTabOrder, previewTab, filesView, filesToggled, selectedRunId, scope, panelOpen, panelMax]);
+  }), [rightTab, tabHistory, experimentsTabOpen, filesTabOpen, artifactsTabOpen, vaultTabOpen, expTabs, fileTabs, planTabs, subagentTabs, codeTabs, contentTabOrder, previewTab, filesView, filesToggled, selectedRunId, scope, panelOpen, panelMax]);
   currentRightPaneStateRef.current = rightPaneState;
   const getFileScroll = useCallback(() => Object.fromEntries(fileScrollPositionsRef.current), []);
   const scrollSaveTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -622,6 +626,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
     setExperimentsTabOpen(state.experimentsTabOpen);
     setFilesTabOpen(state.filesTabOpen);
     setArtifactsTabOpen(state.artifactsTabOpen);
+    setVaultTabOpen(state.vaultTabOpen);
     setExpTabs(state.expTabs);
     setFileTabs(state.fileTabs);
     setPlanTabs((current) => current === state.planTabs ? current : state.planTabs.map((tab) => ({ ...tab, plan: current.find((item) => item.sessionId === tab.sessionId && item.promptId === tab.promptId)?.plan ?? "" })));
@@ -849,6 +854,11 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
   const openArtifactsTab = useCallback(() => {
     setArtifactsTabOpen(true);
     selectRightTab("artifacts");
+  }, [selectRightTab]);
+
+  const openVaultTab = useCallback(() => {
+    setVaultTabOpen(true);
+    selectRightTab("vault");
   }, [selectRightTab]);
 
   // Live store updates.
@@ -1290,9 +1300,10 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
   }, [selectRightTab]);
 
   const closeHomeTab = useCallback(
-    (tab: "experiments" | "files" | "artifacts") => {
+    (tab: "experiments" | "files" | "artifacts" | "vault") => {
       if (tab === "experiments") setExperimentsTabOpen(false);
       else if (tab === "files") setFilesTabOpen(false);
+      else if (tab === "vault") setVaultTabOpen(false);
       else setArtifactsTabOpen(false);
       forgetRightTab(tab, rightTab === tab);
     },
@@ -1608,7 +1619,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
             runs={runs}
             onOpenExperiment={(id, runId) => openExperimentTab(id, "overview", "preview", runId)}
             rightOffset={panelOpen ? panelWidth + 28 : undefined}
-            activeView={panelOpen && (rightTab === "files" || rightTab === "artifacts" || rightTab === "experiments") ? rightTab : null}
+            activeView={panelOpen && (rightTab === "files" || rightTab === "artifacts" || rightTab === "vault" || rightTab === "experiments") ? rightTab : null}
             projectId={activeProject.id}
             onCompute={() => selectMainView("compute")}
             sessionId={activeSessionId}
@@ -1616,6 +1627,7 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
             onChanges={() => { setFilesView("changes"); openWorktreeTab(); }}
             onFiles={() => { setFilesView("files"); openWorktreeTab(); }}
             onArtifacts={openArtifactsTab}
+            onVault={openVaultTab}
             onExperiments={() => openExperimentsTab()}
           />
         )}
@@ -1649,6 +1661,15 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
                     icon={<Package size={12} className="shrink-0" />}
                     onSelect={() => selectRightTab("artifacts")}
                     onClose={() => closeHomeTab("artifacts")}
+                  />
+                )}
+                {vaultTabOpen && (
+                  <ClosableTab
+                    active={rightTab === "vault"}
+                    label={m.app_vault()}
+                    icon={<Archive size={12} className="shrink-0" />}
+                    onSelect={() => selectRightTab("vault")}
+                    onClose={() => closeHomeTab("vault")}
                   />
                 )}
                 {experimentsTabOpen && (
@@ -1701,6 +1722,10 @@ export default function App({ runtime, projectId, pane }: { runtime: RuntimeInfo
                     )?.needsProtection}
                   />
                 )}
+              </TabBody>
+            ) : rightTab === "vault" ? (
+              <TabBody>
+                {activeProject && <VaultTab key={activeProject.id} project={activeProject} />}
               </TabBody>
             ) : rightTab === "experiments" ? (
               <TabBody>

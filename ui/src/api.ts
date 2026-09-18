@@ -1000,7 +1000,15 @@ export interface RemoteSessionInfo {
 export type RuntimeInfo =
   /** `alma` is true when this orx was started by the Alma IDE, whose
    * supervisor can take an approved plan and build it phase by phase. */
-  | { kind: "local"; version: string; alma?: boolean }
+  | {
+      kind: "local";
+      version: string;
+      alma?: boolean;
+      /** The `host:port` this orx was reached at. Inside the Alma IDE the
+       * page lives at `alma://openresearch` and its HTTP is relayed; a
+       * WebSocket must dial this loopback address itself. */
+      loopback?: string | null;
+    }
   | { kind: "ssh"; version: string; dashboardProtocol: number; session: RemoteSessionInfo };
 
 export const getRuntime = (signal?: AbortSignal) => get<RuntimeInfo>("/_orx/runtime", signal);
@@ -1037,6 +1045,33 @@ export interface AlmaBusEvent {
   source: "user" | "agent" | "terminal" | "browser" | "editor";
   kind: string;
   text: string;
+  detail?: Record<string, unknown>;
+}
+
+/** A `draft` event the editor addressed to this page's composer: dictation
+ * in Transcribe mode, tidied, to append to the message box; `enter` alone is
+ * "send it". */
+export interface AlmaDictation {
+  text: string;
+  enter: boolean;
+}
+
+/** The dictation in `event` if it is one meant for the page at `here` — the
+ * editor names the tab it was looking at, and another tab of the dashboard
+ * polls the same bus. */
+export function almaDictationOf(event: AlmaBusEvent, here: string): AlmaDictation | null {
+  if (event.kind !== "draft" || event.detail?.target !== "composer") return null;
+  if (typeof event.detail.page === "string" && !samePage(event.detail.page, here)) return null;
+  const text = typeof event.detail.text === "string" ? event.detail.text : "";
+  return { text, enter: event.detail.enter === true };
+}
+
+function samePage(a: string, b: string): boolean {
+  try {
+    return new URL(a).pathname.replace(/\/+$/, "") === new URL(b).pathname.replace(/\/+$/, "");
+  } catch {
+    return false;
+  }
 }
 
 export const readAlmaBus = (since: number) =>
@@ -1054,6 +1089,94 @@ export interface AlmaTheme {
 }
 
 export const getAlmaTheme = () => post<AlmaTheme>("/api/alma/theme", {});
+
+// --- the editor's vault ------------------------------------------------------
+// The documents a project is built from — the brief as a PDF, the spec, a
+// saved page, the research a session filed — kept by the editor per
+// repository plus `shared`, and indexed so `rag_search` answers from them.
+// A folder is a repository's name; the dashboard names the project's own.
+
+export interface VaultIndexed {
+  sha256: string;
+  chunks: number;
+  indexed_at: number;
+  error?: string | null;
+}
+
+export interface VaultDocument {
+  name: string;
+  bytes: number;
+  modified: number;
+  /** The extractor used; null for a format only stored (an image, a sheet). */
+  kind: string | null;
+  indexed: VaultIndexed | null;
+  /** Changed since it was indexed, or never indexed and could be. */
+  stale: boolean;
+}
+
+export interface VaultFolder {
+  name: string;
+  own: boolean;
+  documents: number;
+  stale: number;
+}
+
+export interface VaultFolders {
+  ok: boolean;
+  error?: string;
+  root: string;
+  project: string | null;
+  folders: VaultFolder[];
+  stack: { qdrant: boolean; embedder: boolean };
+}
+
+export interface VaultListing {
+  ok: boolean;
+  error?: string;
+  folder: string;
+  path: string;
+  documents: VaultDocument[];
+}
+
+export interface VaultPut {
+  ok: boolean;
+  error?: string | null;
+  name: string;
+  chunks: number;
+}
+
+export interface VaultHit {
+  kind: "vault" | "code";
+  folder?: string;
+  name?: string;
+  root?: string;
+  path: string;
+  chunk: number | string;
+  score: number;
+  text: string;
+}
+
+export interface VaultSearch {
+  ok: boolean;
+  error?: string;
+  indexed: boolean;
+  hint: string;
+  hits: VaultHit[];
+}
+
+export const getVaultFolders = () => post<VaultFolders>("/api/alma/vault/folders", {});
+export const listVault = (folder: string) => post<VaultListing>("/api/alma/vault/list", { folder });
+/** A document that arrived from the page: its bytes as base64. Indexed at once. */
+export const putVaultDocument = (folder: string, name: string, base64: string) =>
+  post<VaultPut>("/api/alma/vault/put", { folder, name, base64, secs: 1800 });
+export const removeVaultDocument = (folder: string, name: string) =>
+  post<{ ok: boolean; error?: string }>("/api/alma/vault/remove", { folder, name });
+export const reindexVault = (folder: string) =>
+  post<{ ok: boolean; error?: string; indexed: string[] }>("/api/alma/vault/reindex", { folder, secs: 1800 });
+export const searchVault = (query: string, folders: string[], limit = 12) =>
+  post<VaultSearch>("/api/alma/vault/search", { query, folders, limit, secs: 120 });
+export const searchVaultAndCode = (query: string, limit = 12) =>
+  post<VaultSearch>("/api/alma/rag/search", { query, limit, scope: "all", secs: 120 });
 
 export const listRemoteSessions = (signal?: AbortSignal) =>
   get<{ sessions: RemoteSessionInfo[] }>("/api/remote/sessions", signal).then((r) => r.sessions);

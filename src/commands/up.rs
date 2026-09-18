@@ -690,6 +690,9 @@ fn router(state: AppState, remote_auth: Option<RemoteAuth>) -> Router {
         // JSON body; the 2 MB axum default rejects any real paper. Cap it well
         // above the client-side per-file limit so a full message still fits.
         .layer(DefaultBodyLimit::max(64 * 1024 * 1024))
+        // Inside the loopback guard: only a request that passed it can name
+        // the editor.
+        .layer(middleware::from_fn(remember_alma_editor))
         .with_state(state);
     let app = app.layer(middleware::from_fn(
         crate::commands::up_remote::loopback_guard,
@@ -5419,7 +5422,9 @@ fn same_origin(headers: &HeaderMap) -> bool {
     else {
         return false;
     };
-    origin == format!("http://{host}") || origin == format!("https://{host}")
+    origin == format!("http://{host}")
+        || origin == format!("https://{host}")
+        || crate::commands::up_remote::alma_page_origin(origin)
 }
 
 fn ssh_connect_failure(host: &str, error: String) -> SshHostTest {
@@ -6005,11 +6010,48 @@ async fn disconnect_remote_session(
     Ok(Json(json!(state.remote_sessions.disconnect(&id).await?)))
 }
 
+/// The header the Alma IDE puts on every request it relays to this server,
+/// carrying the port of its control API.
+const ALMA_CONTROL_PORT_HEADER: &str = "x-alma-control-port";
+
+/// Remembers which editor is in front of this server, so the voice relay and
+/// each session's `alma` MCP server reach the editor hosting the page rather
+/// than the one that happened to start `orx up`.
+async fn remember_alma_editor(request: axum::extract::Request, next: Next) -> Response {
+    if let Some(port) = request
+        .headers()
+        .get(ALMA_CONTROL_PORT_HEADER)
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| value.trim().parse::<u16>().ok())
+        .filter(|port| *port != 0)
+    {
+        crate::local::chat::note_alma_control_port(port);
+    }
+    next.run(request).await
+}
+
 /// The routes of the editor's control API the dashboard may call: the
-/// orb's state, mic and mode, a sentence for it to say, the transcript bus
-/// and the editor's theme. Nothing else — the browser and terminal routes
-/// stay the agents'.
-const ALMA_VOICE_ROUTES: [&str; 6] = ["voice/state", "voice/talk", "voice/mode", "say", "bus", "theme"];
+/// orb's state, mic and mode, a sentence for it to say, the transcript bus,
+/// the editor's theme — and the vault, the documents a project is built
+/// from, which the dashboard's Vault view reads and fills. Nothing else —
+/// the browser and terminal routes stay the agents'.
+const ALMA_VOICE_ROUTES: [&str; 15] = [
+    "voice/state",
+    "voice/talk",
+    "voice/mode",
+    "say",
+    "bus",
+    "theme",
+    "vault/folders",
+    "vault/list",
+    "vault/add",
+    "vault/put",
+    "vault/remove",
+    "vault/reindex",
+    "vault/search",
+    "rag/search",
+    "catalog/match",
+];
 
 async fn alma_voice(
     State(state): State<AppState>,
@@ -6023,13 +6065,18 @@ async fn alma_voice(
     Ok(Json(state.chat.ask_alma(&route, body).await?))
 }
 
-async fn local_runtime() -> Json<Value> {
+async fn local_runtime(headers: HeaderMap) -> Json<Value> {
     Json(json!({
         "kind": "local",
         "version": env!("CARGO_PKG_VERSION"),
         // Inside the Alma IDE a plan can be approved into its supervisor;
         // the strip offers that only when it is true.
         "alma": crate::local::chat::alma_supervisor_available(),
+        // The address this request reached the server at. The Alma IDE
+        // relays the page's HTTP from its own `alma://openresearch` origin,
+        // which cannot carry a WebSocket upgrade; the page dials this for
+        // one instead (see `ALMA_PAGE_ORIGIN`).
+        "loopback": headers.get(header::HOST).and_then(|value| value.to_str().ok()),
     }))
 }
 

@@ -95,6 +95,9 @@ pub enum HomeView {
     Experiments,
     Files,
     Artifacts,
+    /// The documents a project is built from, kept and indexed by the Alma
+    /// editor; a tab only inside it.
+    Vault,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]

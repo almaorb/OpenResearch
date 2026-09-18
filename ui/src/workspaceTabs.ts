@@ -30,6 +30,7 @@ export function rememberWorkspace(state: RightPaneSessionState, scroll: TaskWork
   const home: RightTab[] = [];
   if (state.filesTabOpen) home.push("files");
   if (state.artifactsTabOpen) home.push("artifacts");
+  if (state.vaultTabOpen) home.push("vault");
   if (state.experimentsTabOpen) home.push("experiments");
   const content = [...state.expTabs, ...state.fileTabs, ...state.planTabs, ...state.subagentTabs, ...state.codeTabs];
   const byKey = new Map(content.map((tab) => [rightTabKey(tab), tab]));
@@ -63,6 +64,7 @@ export function restoreWorkspace(saved: TaskWorkspace | undefined, pane: Pane | 
       if (tab === "experiments") state.experimentsTabOpen = true;
       if (tab === "files") state.filesTabOpen = true;
       if (tab === "artifacts") state.artifactsTabOpen = true;
+      if (tab === "vault") state.vaultTabOpen = true;
       continue;
     }
     if ("code" in tab) { tab.toggled = new Set(saved?.expanded[rightTabKey(tab)] ?? []); state.codeTabs.push(tab); }
@@ -183,6 +185,7 @@ export type RightTab =
   | "experiments"
   | "files"
   | "artifacts"
+  | "vault"
   | ExpViewDef
   | FileViewDef
   | PlanViewDef
@@ -218,6 +221,7 @@ export interface RightPaneSessionState {
   experimentsTabOpen: boolean;
   filesTabOpen: boolean;
   artifactsTabOpen: boolean;
+  vaultTabOpen: boolean;
   expTabs: ExpViewDef[];
   fileTabs: FileViewDef[];
   planTabs: PlanViewDef[];
@@ -245,6 +249,7 @@ export function initialRightPaneSessionState(
     experimentsTabOpen: false,
     filesTabOpen: false,
     artifactsTabOpen: false,
+    vaultTabOpen: false,
     expTabs: [],
     fileTabs: [],
     planTabs: [],
@@ -329,6 +334,7 @@ export function applyPane(state: RightPaneSessionState, pane: Pane | undefined):
   if (typeof tab === "string") {
     if (tab === "files") next.filesTabOpen = true;
     else if (tab === "artifacts") next.artifactsTabOpen = true;
+    else if (tab === "vault") next.vaultTabOpen = true;
     else next.experimentsTabOpen = true;
   } else {
     if ("path" in tab) next.fileTabs = update(state.fileTabs, tab);
